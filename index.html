@@ -4,6 +4,11 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b5b46"><title>Quran Journey | Teacher Dashboard</title>
 <link rel="stylesheet" href="style.css">
+
+<meta name="description" content="A simple, beautiful Quran learning progress tracker for teachers and families.">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<link rel="apple-touch-icon" href="./icon.svg">
 </head>
 <body>
 <header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Every child's journey with the Quran</div></div><div class="top-pill">Teacher Dashboard</div></header>
@@ -28,4 +33,5 @@
 </section></div>
 <footer>Quran Journey <span>•</span> Learn consistently. Keep progressing.</footer>
 </main><div id="toast" role="status" aria-live="polite"></div><script src="app.js"></script><script src="photo.js"></script>
+<script>if('serviceWorker' in navigator && location.protocol!=='file:'){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}</script>
 </body></html>

@@ -1,0 +1,19 @@
+{
+  "name": "Quran Journey",
+  "short_name": "Quran Journey",
+  "description": "Track students' Quran learning progress.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f8f5",
+  "theme_color": "#0b5b46",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
