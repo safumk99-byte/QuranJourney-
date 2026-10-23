@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b5b46"><title>Quran Journey | Teacher Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Every child's journey with the Quran</div></div><div class="top-pill">Teacher Dashboard</div></header>
+<main class="container">
+<section class="hero"><div><div class="eyebrow">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div><h1>Every page is progress.</h1><p>Track students' learning progress and inspire their journey with the Quran.</p></div><div class="hero-art" aria-hidden="true">۞<span>القرآن الكريم</span></div></section>
+<section class="stats" id="stats"></section>
+<div class="layout">
+<section class="panel form-panel"><div class="section-head"><div><div class="eyebrow green">STUDENT DETAILS</div><h2 id="formTitle">Add a New Student</h2></div><span class="icon-badge">＋</span></div>
+<form id="studentForm">
+<input type="hidden" id="studentId">
+<label>Student Name<input id="name" required maxlength="80" placeholder="Enter student name"></label>
+<label>Student Photo (optional)<input id="photo" type="file" accept="image/*"><span class="photo-help">Choose a photo from your phone. It will be stored locally in this browser.</span></label><div id="photoPreview" class="photo-preview" hidden><img id="photoPreviewImg" alt="Selected student photo"><button class="mini-btn" type="button" id="removePhoto">Remove Photo</button></div>
+<div class="field-row"><label>Class / Batch<input id="className" maxlength="40" placeholder="e.g. Hifz 1"></label><label>Total Quran Pages<input id="totalPages" type="number" min="1" max="2000" value="604" required></label></div>
+<div class="field-row"><label>Pages Completed<input id="completedPages" type="number" min="0" value="0" required></label><label>Average Pages per Day<input id="dailyPages" type="number" min="0.1" step="0.1" value="2" required></label></div>
+<div class="preview" id="preview"><div class="preview-label">Estimated Completion</div><strong>—</strong><span>Calculated as you enter details</span></div>
+<div class="actions"><button class="btn primary" type="submit" id="saveBtn">＋ Add Student</button><button class="btn secondary" type="button" id="cancelEdit" hidden>Cancel</button></div>
+<p class="note">In this version, data is saved only in this browser on this device.</p>
+</form></section>
+<section class="panel list-panel"><div class="section-head list-title"><div><div class="eyebrow green">LEARNING TRACKER</div><h2>Students</h2></div><span class="count" id="studentCount">0 students</span></div>
+<div class="toolbar"><input id="search" type="search" placeholder="🔎  Search students"><select id="filterClass"><option value="">All Classes</option></select></div>
+<div id="studentsList" class="students-list"></div><div class="empty" id="emptyState"><div class="empty-icon">📖</div><strong>No students added yet</strong><p>Use the form to add your first student.</p></div>
+</section></div>
+<footer>Quran Journey <span>•</span> Learn consistently. Keep progressing.</footer>
+</main><div id="toast" role="status" aria-live="polite"></div><script src="app.js"></script><script src="photo.js"></script>
+</body></html>
