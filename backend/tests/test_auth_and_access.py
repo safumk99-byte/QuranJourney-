@@ -88,3 +88,30 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert marks.json()[0]["ms"] == 3
     assert marks.json()[0]["mu"] == 4
     assert marks.json()[0]["points"] == 9
+
+def test_parent_cannot_import_localstorage_backup(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    student = client.post("/students", headers=auth(teacher_token), json={"student_code":"T-IMPORT-001", "name":"Import Guard Child"}).json()
+    created = client.post("/parents", headers=auth(teacher_token), json={"login_id":"parent_import_guard", "password":"Parent-Import-Password-123!", "student_ids":[student["id"]]})
+    assert created.status_code == 201
+    parent_token = login(client, "parent_import_guard", "Parent-Import-Password-123!").json()["access_token"]
+    denied = client.post("/migration/localstorage", headers=auth(parent_token), json={"students":[{"id":"attacker-student","name":"Injected Child"}]})
+    assert denied.status_code == 403
+    visible = client.get("/students", headers=auth(teacher_token))
+    assert all(row["name"] != "Injected Child" for row in visible.json())
+
+
+def test_import_caps_completed_pages_at_total_pages(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    backup = {
+        "students": [{"id":"legacy-cap-1", "name":"Page Cap", "totalPages":10, "completedPages":0}],
+        "reading_entries": [{"id":"cap-entry-1", "studentId":"legacy-cap-1", "date":"2026-10-20", "pages":20}],
+        "reading_base_pages": {"legacy-cap-1":9}
+    }
+    response = client.post("/migration/localstorage", headers=headers, json=backup)
+    assert response.status_code == 200, response.text
+    students = client.get("/students", headers=headers).json()
+    imported_student = next(row for row in students if row["name"] == "Page Cap")
+    assert imported_student["completed_pages"] == 10
+
