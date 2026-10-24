@@ -202,3 +202,51 @@ def test_parent_cannot_read_any_record_type_for_unlinked_student(client):
     assert client.get(f"/students/{linked['id']}/attendance", headers=parent_headers).status_code == 200
     assert client.get(f"/students/{linked['id']}/marks", headers=parent_headers).status_code == 200
 
+def test_frontend_api_contract_teacher_to_parent_read_flow(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+
+    created_student = client.post("/students", headers=teacher_headers, json={
+        "student_code": "QJ-CONTRACT-001", "name": "Contract Test Child", "class_name": "Hifz A"
+    })
+    assert created_student.status_code == 201, created_student.text
+    student_id = created_student.json()["id"]
+
+    assert client.post(f"/students/{student_id}/reading", headers=teacher_headers, json={
+        "entry_date": "2026-10-24T00:00:00", "new_lesson": "Al-Baqarah 1-5",
+        "pages": "2", "recent_revision": "Al-Fatiha", "general_revision": "Juz 1",
+        "remarks": "Good progress"
+    }).status_code == 201
+    assert client.post(f"/students/{student_id}/attendance", headers=teacher_headers, json={
+        "attendance_date": "2026-10-24T00:00:00", "status": "present", "remarks": "On time"
+    }).status_code == 201
+    assert client.post(f"/students/{student_id}/marks", headers=teacher_headers, json={
+        "mark_date": "2026-10-24T00:00:00", "points": 9, "remarks": "Excellent"
+    }).status_code == 201
+
+    parent_created = client.post("/parents", headers=teacher_headers, json={
+        "login_id": "parent_contract", "password": "Parent-Contract-123!", "student_ids": [student_id]
+    })
+    assert parent_created.status_code == 201, parent_created.text
+    parent_login = login(client, "parent_contract", "Parent-Contract-123!")
+    assert parent_login.status_code == 200
+    parent_headers = auth(parent_login.json()["access_token"])
+
+    # These are the response fields consumed by parent.js.
+    children = client.get("/students", headers=parent_headers)
+    assert children.status_code == 200
+    assert children.json() == [{
+        "id": student_id, "student_code": "QJ-CONTRACT-001", "name": "Contract Test Child",
+        "class_name": "Hifz A", "total_pages": 604, "completed_pages": 0,
+        "current_juz": 1, "journey_start_date": None, "photo_data": None
+    }]
+
+    reading = client.get(f"/students/{student_id}/reading", headers=parent_headers).json()
+    attendance = client.get(f"/students/{student_id}/attendance", headers=parent_headers).json()
+    marks = client.get(f"/students/{student_id}/marks", headers=parent_headers).json()
+    assert reading[0]["new_lesson"] == "Al-Baqarah 1-5"
+    assert reading[0]["pages"] == "2"
+    assert attendance[0]["status"] == "present"
+    assert (marks[0]["s"], marks[0]["ms"], marks[0]["mu"], marks[0]["points"]) == (0, 0, 0, 9)
+    assert marks[0]["remarks"] == "Excellent"
+
