@@ -393,7 +393,7 @@ def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(
 def get_marks(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     rows = db.scalars(select(DailyMark).where(DailyMark.student_id == student_id).order_by(DailyMark.mark_date.desc())).all()
-    return [{"id": r.id, "date": r.mark_date.isoformat(), "points": r.points, "remarks": r.remarks} for r in rows]
+    return [{"id": r.id, "date": r.mark_date.isoformat(), "points": r.points, "s": r.score_s, "ms": r.score_ms, "mu": r.score_mu, "remarks": r.remarks} for r in rows]
 
 @app.post("/students/{student_id}/marks", status_code=201)
 def add_mark(student_id: int, data: MarkInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
