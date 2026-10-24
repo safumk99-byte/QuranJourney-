@@ -518,3 +518,44 @@ def test_reading_entry_mutations_are_teacher_only_and_student_scoped(client):
         "new_lesson": "Unauthorized"
     }).status_code == 403
     assert client.delete(f"/students/{first['id']}/reading/{entry['id']}", headers=parent_headers).status_code == 403
+
+
+def test_reading_entry_pages_update_student_progress_without_double_counting(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={
+        "student_code": "QJ-PAGE-PROGRESS", "name": "Page Progress Child",
+        "total_pages": 10, "completed_pages": 2
+    }).json()
+    student_id = student["id"]
+
+    created = client.post(f"/students/{student_id}/reading", headers=headers, json={
+        "entry_date": "2026-10-24T00:00:00", "new_lesson": "Lesson", "pages": "3"
+    })
+    assert created.status_code == 201, created.text
+    assert client.get("/students", headers=headers).json()[0]["completed_pages"] == 5
+
+    entry_id = created.json()["id"]
+    updated = client.patch(f"/students/{student_id}/reading/{entry_id}", headers=headers, json={"pages": "4"})
+    assert updated.status_code == 200, updated.text
+    assert client.get("/students", headers=headers).json()[0]["completed_pages"] == 6
+
+    deleted = client.delete(f"/students/{student_id}/reading/{entry_id}", headers=headers)
+    assert deleted.status_code == 204
+    assert client.get("/students", headers=headers).json()[0]["completed_pages"] == 2
+
+
+def test_reading_entry_progress_never_exceeds_total_pages(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={
+        "student_code": "QJ-PAGE-CAP", "name": "Page Cap Child",
+        "total_pages": 5, "completed_pages": 4
+    }).json()
+    student_id = student["id"]
+    response = client.post(f"/students/{student_id}/reading", headers=headers, json={
+        "entry_date": "2026-10-24T00:00:00", "pages": "20"
+    })
+    assert response.status_code == 201, response.text
+    visible = next(s for s in client.get("/students", headers=headers).json() if s["id"] == student_id)
+    assert visible["completed_pages"] == 5
