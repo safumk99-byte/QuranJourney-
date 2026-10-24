@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -50,7 +50,7 @@ class Student(Base):
     name: Mapped[str] = mapped_column(String(160), index=True)
     class_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     total_pages: Mapped[int] = mapped_column(Integer, default=604)
-    completed_pages: Mapped[int] = mapped_column(Integer, default=0)
+    completed_pages: Mapped[float] = mapped_column(Float, default=0.0)
     current_juz: Mapped[int] = mapped_column(Integer, default=1)
     journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
