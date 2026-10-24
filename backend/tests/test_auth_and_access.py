@@ -286,3 +286,31 @@ def test_attendance_rejects_invalid_status_and_marks_enforce_point_bounds(client
     )
     assert valid_mark.status_code == 201
 
+def test_inactive_account_cannot_login_or_reuse_existing_token(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    with main.SessionLocal() as db:
+        teacher = db.scalar(main.select(main.User).where(main.User.login_id == "test_teacher"))
+        teacher.is_active = False
+        db.commit()
+
+    denied_login = login(client, "test_teacher", "Test-Teacher-Password-123!")
+    assert denied_login.status_code == 401
+    denied_existing_token = client.get("/auth/me", headers=auth(teacher_token))
+    assert denied_existing_token.status_code == 401
+
+
+def test_invalid_or_expired_bearer_token_is_rejected(client):
+    import jwt
+    from datetime import datetime, timedelta, timezone
+
+    invalid = client.get("/auth/me", headers=auth("not-a-valid-jwt"))
+    assert invalid.status_code == 401
+
+    expired = jwt.encode(
+        {"sub": "1", "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        main.JWT_SECRET,
+        algorithm="HS256",
+    )
+    expired_response = client.get("/auth/me", headers=auth(expired))
+    assert expired_response.status_code == 401
+
