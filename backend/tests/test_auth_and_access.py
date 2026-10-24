@@ -427,6 +427,20 @@ def test_teacher_student_delete_is_soft_and_parent_no_longer_sees_student(client
     })
     assert created.status_code == 201
     student_id = created.json()["id"]
+    reading = client.post(f"/students/{student_id}/reading", headers=teacher_headers, json={
+        "entry_date": "2026-10-24T00:00:00", "new_lesson": "Existing record", "pages": "2"
+    })
+    assert reading.status_code == 201
+    reading_id = reading.json()["id"]
+    attendance = client.post(f"/students/{student_id}/attendance", headers=teacher_headers, json={
+        "attendance_date": "2026-10-24T00:00:00", "status": "present"
+    })
+    assert attendance.status_code == 201
+    mark = client.post(f"/students/{student_id}/marks", headers=teacher_headers, json={
+        "mark_date": "2026-10-24T00:00:00", "points": 5
+    })
+    assert mark.status_code == 201
+    mark_id = mark.json()["id"]
     parent_created = client.post("/parents", headers=teacher_headers, json={
         "login_id": "parent_delete_guard", "password": "Parent-Delete-Guard-123!", "student_ids": [student_id]
     })
@@ -450,10 +464,18 @@ def test_teacher_student_delete_is_soft_and_parent_no_longer_sees_student(client
     assert client.post(f"/students/{student_id}/marks", headers=teacher_headers, json={
         "mark_date": "2026-10-24T00:00:00", "points": 5
     }).status_code == 404
-    # Existing records are not cascade-deleted by the soft-delete operation.
+    assert client.patch(f"/students/{student_id}/reading/{reading_id}", headers=teacher_headers, json={
+        "new_lesson": "Must remain unchanged"
+    }).status_code == 404
+    assert client.delete(f"/students/{student_id}/reading/{reading_id}", headers=teacher_headers).status_code == 404
+    assert client.delete(f"/students/{student_id}/marks/{mark_id}", headers=teacher_headers).status_code == 404
+    # Soft delete preserves the student and existing records in the database.
     with main.SessionLocal() as db:
         row = db.get(main.Student, student_id)
         assert row is not None and row.is_active is False
+        assert db.get(main.ReadingEntry, reading_id) is not None
+        assert db.scalar(main.select(main.Attendance).where(main.Attendance.student_id == student_id)) is not None
+        assert db.get(main.DailyMark, mark_id) is not None
 
 
 def test_student_update_rejects_completed_pages_above_total(client):
