@@ -1,3 +1,5 @@
+import main
+
 def login(client, login_id, password):
     return client.post("/auth/login", json={"login_id": login_id, "password": password})
 
