@@ -546,6 +546,7 @@ def get_reading(student_id: int, user: User = Depends(current_user), db: Session
 
 @app.patch("/students/{student_id}/reading/{entry_id}")
 def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
     if row is None:
         raise HTTPException(status_code=404, detail="Reading entry not found")
@@ -565,6 +566,7 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
 
 @app.delete("/students/{student_id}/reading/{entry_id}", status_code=204)
 def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
     if row is None:
         raise HTTPException(status_code=404, detail="Reading entry not found")
@@ -575,6 +577,7 @@ def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_
 
 @app.post("/students/{student_id}/reading", status_code=201)
 def add_reading(student_id: int, data: ReadingInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
@@ -592,6 +595,7 @@ def get_attendance(student_id: int, user: User = Depends(current_user), db: Sess
 
 @app.post("/students/{student_id}/attendance", status_code=201)
 def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     if data.status not in {"present", "absent", "leave"}:
         raise HTTPException(status_code=422, detail="Status must be present, absent, or leave")
     if not db.get(Student, student_id):
@@ -610,6 +614,7 @@ def get_marks(student_id: int, user: User = Depends(current_user), db: Session =
 
 @app.post("/students/{student_id}/marks", status_code=201)
 def add_mark(student_id: int, data: MarkInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     row = DailyMark(student_id=student_id, mark_date=data.mark_date.date(), points=data.points, score_s=data.s, score_ms=data.ms, score_mu=data.mu, remarks=data.remarks)
@@ -620,6 +625,7 @@ def add_mark(student_id: int, data: MarkInput, user: User = Depends(require_teac
 
 @app.delete("/students/{student_id}/marks/{mark_id}", status_code=204)
 def delete_mark(student_id: int, mark_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
     row = db.scalar(select(DailyMark).where(DailyMark.id == mark_id, DailyMark.student_id == student_id))
     if row is None:
         raise HTTPException(status_code=404, detail="Daily mark not found")
