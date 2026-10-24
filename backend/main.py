@@ -257,6 +257,9 @@ def allowed_student_ids(user: User, db: Session) -> set[int] | None:
     return set(db.scalars(select(ParentStudent.student_id).where(ParentStudent.parent_user_id == user.id)).all())
 
 def check_student_access(student_id: int, user: User, db: Session) -> None:
+    student = db.get(Student, student_id)
+    if student is None or not student.is_active:
+        raise HTTPException(status_code=404, detail="Student not found")
     if user.role == "teacher":
         return
     if user.role != "parent" or student_id not in (allowed_student_ids(user, db) or set()):
