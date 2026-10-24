@@ -347,3 +347,22 @@ def test_protected_endpoints_reject_missing_authentication(client):
     assert client.post("/students", json={"student_code": "QJ-NO-AUTH", "name": "Unauthorized"}).status_code == 401
     assert client.post("/migration/localstorage", json={"students": []}).status_code == 401
 
+def test_reading_rejects_bad_date_and_long_pages_value(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={"student_code": "READ-VAL", "name": "Reading Validation"}).json()
+    bad_date = client.post(f"/students/{student['id']}/reading", headers=headers, json={"entry_date": "not-a-date"})
+    long_value = client.post(f"/students/{student['id']}/reading", headers=headers, json={"entry_date": "2026-10-24T00:00:00", "pages": "x" * 201})
+    assert bad_date.status_code == 422
+    assert long_value.status_code == 422
+    assert client.get(f"/students/{student['id']}/reading", headers=headers).json() == []
+
+
+def test_attendance_rejects_bad_date_without_saving(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={"student_code": "ATT-DATE", "name": "Attendance Date"}).json()
+    response = client.post(f"/students/{student['id']}/attendance", headers=headers, json={"attendance_date": "not-a-date", "status": "present"})
+    assert response.status_code == 422
+    assert client.get(f"/students/{student['id']}/attendance", headers=headers).json() == []
+
