@@ -50,7 +50,7 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     backup = {
         "students": [{
             "id": "legacy-student-1", "name": "Amina", "className": "Class 2",
-            "totalPages": 604, "completedPages": 45, "currentJuz": 3,
+            "totalPages": 604, "completedPages": 10, "currentJuz": 3,
             "journeyStartDate": "2026-01-01"
         }],
         "photos": {"Amina": "data:image/jpeg;base64,TEST"},
