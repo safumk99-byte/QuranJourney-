@@ -389,3 +389,68 @@ def test_parent_creation_rejects_short_password_and_empty_student_list(client):
     assert short_password.status_code == 422
     assert no_students.status_code == 422
 
+
+
+def test_teacher_can_update_student_and_parent_cannot(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    created = client.post("/students", headers=teacher_headers, json={
+        "student_code": "QJ-UPDATE-001", "name": "Before Update", "class_name": "Hifz A"
+    })
+    assert created.status_code == 201
+    student_id = created.json()["id"]
+
+    updated = client.patch(f"/students/{student_id}", headers=teacher_headers, json={
+        "name": "After Update", "class_name": "Hifz B", "total_pages": 604,
+        "completed_pages": 25, "current_juz": 2, "journey_start_date": "2026-10-01"
+    })
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "After Update"
+    assert updated.json()["class_name"] == "Hifz B"
+    assert updated.json()["completed_pages"] == 25
+    assert updated.json()["current_juz"] == 2
+
+    parent_created = client.post("/parents", headers=teacher_headers, json={
+        "login_id": "parent_update_guard", "password": "Parent-Update-Guard-123!", "student_ids": [student_id]
+    })
+    assert parent_created.status_code == 201
+    parent_token = login(client, "parent_update_guard", "Parent-Update-Guard-123!").json()["access_token"]
+    denied = client.patch(f"/students/{student_id}", headers=auth(parent_token), json={"name": "Unauthorized"})
+    assert denied.status_code == 403
+
+
+def test_teacher_student_delete_is_soft_and_parent_no_longer_sees_student(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    created = client.post("/students", headers=teacher_headers, json={
+        "student_code": "QJ-DELETE-001", "name": "Soft Delete Child"
+    })
+    assert created.status_code == 201
+    student_id = created.json()["id"]
+    parent_created = client.post("/parents", headers=teacher_headers, json={
+        "login_id": "parent_delete_guard", "password": "Parent-Delete-Guard-123!", "student_ids": [student_id]
+    })
+    assert parent_created.status_code == 201
+    parent_token = login(client, "parent_delete_guard", "Parent-Delete-Guard-123!").json()["access_token"]
+
+    deleted = client.delete(f"/students/{student_id}", headers=teacher_headers)
+    assert deleted.status_code == 204
+    assert all(row["id"] != student_id for row in client.get("/students", headers=teacher_headers).json())
+    assert client.get("/students", headers=auth(parent_token)).json() == []
+    # Existing records are not cascade-deleted by the soft-delete operation.
+    with main.SessionLocal() as db:
+        row = db.get(main.Student, student_id)
+        assert row is not None and row.is_active is False
+
+
+def test_student_update_rejects_completed_pages_above_total(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    created = client.post("/students", headers=headers, json={
+        "student_code": "QJ-UPDATE-VALIDATION", "name": "Progress Validation"
+    })
+    student_id = created.json()["id"]
+    response = client.patch(f"/students/{student_id}", headers=headers, json={
+        "total_pages": 10, "completed_pages": 11
+    })
+    assert response.status_code == 422
