@@ -50,7 +50,7 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     backup = {
         "students": [{
             "id": "legacy-student-1", "name": "Amina", "className": "Class 2",
-            "totalPages": 604, "completedPages": 45, "currentJuz": 3,
+            "totalPages": 604, "completedPages": 10, "currentJuz": 3,
             "journeyStartDate": "2026-01-01"
         }],
         "photos": {"Amina": "data:image/jpeg;base64,TEST"},
@@ -74,7 +74,7 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert second.json()["imported"]["daily_marks_created"] == 0
     students = client.get("/students", headers=headers).json()
     assert len(students) == 1
-    assert students[0]["completed_pages"] == 45
+    assert students[0]["completed_pages"] == 45  # base pages 43 + entry pages 2
     assert students[0]["current_juz"] == 3
     assert students[0]["photo_data"] == "data:image/jpeg;base64,TEST"
     marks = client.get(f"/students/{students[0]['id']}/marks", headers=headers)
