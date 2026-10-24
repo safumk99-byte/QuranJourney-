@@ -76,3 +76,10 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert len(students) == 1
     assert students[0]["completed_pages"] == 45
     assert students[0]["current_juz"] == 3
+    assert students[0]["photo_data"] == "data:image/jpeg;base64,TEST"
+    marks = client.get(f"/students/{students[0]['id']}/marks", headers=headers)
+    assert marks.status_code == 200
+    assert marks.json()[0]["s"] == 2
+    assert marks.json()[0]["ms"] == 3
+    assert marks.json()[0]["mu"] == 4
+    assert marks.json()[0]["points"] == 9
