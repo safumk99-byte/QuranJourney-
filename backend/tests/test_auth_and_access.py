@@ -239,7 +239,7 @@ def test_frontend_api_contract_teacher_to_parent_read_flow(client):
     assert children.status_code == 200
     assert children.json() == [{
         "id": student_id, "student_code": "QJ-CONTRACT-001", "name": "Contract Test Child",
-        "class_name": "Hifz A", "total_pages": 604, "completed_pages": 0,
+        "class_name": "Hifz A", "total_pages": 604, "completed_pages": 2,
         "current_juz": 1, "journey_start_date": None, "photo_data": None
     }]
 
