@@ -204,6 +204,42 @@ def test_parent_cannot_read_any_record_type_for_unlinked_student(client):
     assert client.get(f"/students/{linked['id']}/attendance", headers=parent_headers).status_code == 200
     assert client.get(f"/students/{linked['id']}/marks", headers=parent_headers).status_code == 200
 
+def test_teacher_can_save_and_read_surah_ayah_range(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={"student_code": "QJ-AYAH-001", "name": "Ayah Test"}).json()
+    response = client.post(f"/students/{student['id']}/reading", headers=headers, json={
+        "entry_date": "2026-10-25T00:00:00",
+        "start_surah": 2, "start_ayah": 1, "end_surah": 3, "end_ayah": 10,
+        "new_lesson": "Today's lesson", "pages": "1.5"
+    })
+    assert response.status_code == 201, response.text
+    reading = client.get(f"/students/{student['id']}/reading", headers=headers)
+    assert reading.status_code == 200
+    assert reading.json()[0]["start_surah"] == 2
+    assert reading.json()[0]["start_ayah"] == 1
+    assert reading.json()[0]["end_surah"] == 3
+    assert reading.json()[0]["end_ayah"] == 10
+
+def test_reading_rejects_invalid_surah_ayah_range(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    student = client.post("/students", headers=headers, json={"student_code": "QJ-AYAH-002", "name": "Ayah Validation"}).json()
+    too_many_ayahs = client.post(f"/students/{student['id']}/reading", headers=headers, json={
+        "entry_date": "2026-10-25T00:00:00",
+        "start_surah": 1, "start_ayah": 8, "end_surah": 1, "end_ayah": 8
+    })
+    backwards = client.post(f"/students/{student['id']}/reading", headers=headers, json={
+        "entry_date": "2026-10-25T00:00:00",
+        "start_surah": 2, "start_ayah": 10, "end_surah": 2, "end_ayah": 2
+    })
+    partial_range = client.post(f"/students/{student['id']}/reading", headers=headers, json={
+        "entry_date": "2026-10-25T00:00:00", "start_surah": 2, "start_ayah": 1
+    })
+    assert too_many_ayahs.status_code == 422
+    assert backwards.status_code == 422
+    assert partial_range.status_code == 422
+
 def test_frontend_api_contract_teacher_to_parent_read_flow(client):
     teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
     teacher_headers = auth(teacher_token)
