@@ -76,7 +76,7 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert len(students) == 1
     assert students[0]["completed_pages"] == 45
     # Re-import must recalculate from the backup, not add the same pages twice.
-    assert students[0]["completed_pages"] == 45
+    assert students[0]["completed_pages"] <= students[0]["total_pages"]
     assert students[0]["current_juz"] == 3
     assert students[0]["photo_data"] == "data:image/jpeg;base64,TEST"
     marks = client.get(f"/students/{students[0]['id']}/marks", headers=headers)
