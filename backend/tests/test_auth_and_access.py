@@ -125,3 +125,25 @@ def test_reimport_without_photo_does_not_erase_existing_photo(client):
     students = client.get("/students", headers=headers).json()
     row = next(student for student in students if student["name"] == "Photo Keep")
     assert row["photo_data"] == "data:image/jpeg;base64,KEEP"
+
+def test_import_skips_negative_or_out_of_range_marks(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    backup = {
+        "students": [{"id": "legacy-mark-validation", "name": "Mark Validation"}],
+        "daily_marks": [
+            {"id": "valid-mark", "date": "2026-10-20", "name": "Mark Validation", "s": 2, "ms": 3, "mu": 4, "total": 9},
+            {"id": "negative-mark", "date": "2026-10-20", "name": "Mark Validation", "s": -1, "ms": 0, "mu": 0, "total": -1},
+            {"id": "oversized-mark", "date": "2026-10-20", "name": "Mark Validation", "s": 1001, "ms": 0, "mu": 0, "total": 1001},
+        ],
+    }
+    response = client.post("/migration/localstorage", headers=headers, json=backup)
+    assert response.status_code == 200, response.text
+    assert response.json()["imported"]["daily_marks_created"] == 1
+    assert response.json()["imported"]["skipped"] == 2
+    students = client.get("/students", headers=headers).json()
+    student = next(row for row in students if row["name"] == "Mark Validation")
+    marks = client.get(f"/students/{student['id']}/marks", headers=headers).json()
+    assert len(marks) == 1
+    assert (marks[0]["s"], marks[0]["ms"], marks[0]["mu"], marks[0]["points"]) == (2, 3, 4, 9)
+
