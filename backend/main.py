@@ -374,7 +374,12 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                 continue
             mark_date = datetime.fromisoformat(str(item.get("date"))).date()
             s, ms, mu = int(item.get("s") or 0), int(item.get("ms") or 0), int(item.get("mu") or 0)
-            db.add(DailyMark(student_id=student.id, mark_date=mark_date, points=int(item.get("total") or s+ms+mu), score_s=s, score_ms=ms, score_mu=mu, legacy_id=legacy_id))
+            points = int(item.get("total") or s + ms + mu)
+            # Reject malformed negative marks rather than importing corrupt scores.
+            if min(s, ms, mu, points) < 0 or max(s, ms, mu, points) > 1000:
+                imported["skipped"] += 1
+                continue
+            db.add(DailyMark(student_id=student.id, mark_date=mark_date, points=points, score_s=s, score_ms=ms, score_mu=mu, legacy_id=legacy_id))
             imported["daily_marks_created"] += 1
         except (ValueError, TypeError):
             imported["skipped"] += 1
