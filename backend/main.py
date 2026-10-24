@@ -29,7 +29,7 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 password_hash = PasswordHash.recommended()
 bearer = HTTPBearer(auto_error=False)
-TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "60"))
+TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "43200"))  # 30-day persistent sessions by default
 
 class Base(DeclarativeBase):
     pass
@@ -451,7 +451,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                 "student_code": code, "name": name[:160],
                 "class_name": str(item.get("className") or "Unassigned class")[:100],
                 "total_pages": max(1, min(2000, int(item.get("totalPages") or 604))),
-                "completed_pages": max(0, min(max(1, min(2000, int(item.get("totalPages") or 604))), int(item.get("completedPages") or 0))),
+                "completed_pages": max(0.0, min(max(1, min(2000, int(item.get("totalPages") or 604))), float(item.get("completedPages") or 0))),
                 "current_juz": max(1, min(30, int(item.get("currentJuz") or 1))),
                 "journey_start_date": datetime.fromisoformat(str(item.get("journeyStartDate") or item.get("createdAt") or datetime.now(timezone.utc).date()).replace("Z","+00:00")).date(),
                 "photo_data": data.photos.get(name) if name in data.photos else (row.photo_data if row is not None else None),
