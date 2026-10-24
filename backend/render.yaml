@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: quran-journey-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: INITIAL_TEACHER_ID
+        sync: false
+      - key: INITIAL_TEACHER_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://safumk99-byte.github.io
+      - key: ACCESS_TOKEN_MINUTES
+        value: "60"
