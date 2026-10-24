@@ -378,7 +378,11 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
             imported["daily_marks_created"] += 1
         except (ValueError, TypeError):
             imported["skipped"] += 1
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"status": "ok", "imported": imported, "message": "Import is additive; existing records were not deleted."}
 
 @app.get("/students/{student_id}/reading")
