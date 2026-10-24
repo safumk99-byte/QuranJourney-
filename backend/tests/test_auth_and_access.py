@@ -437,6 +437,10 @@ def test_teacher_student_delete_is_soft_and_parent_no_longer_sees_student(client
     assert deleted.status_code == 204
     assert all(row["id"] != student_id for row in client.get("/students", headers=teacher_headers).json())
     assert client.get("/students", headers=auth(parent_token)).json() == []
+    # A soft-deleted student's historical records must not remain accessible.
+    assert client.get(f"/students/{student_id}/reading", headers=teacher_headers).status_code == 404
+    assert client.get(f"/students/{student_id}/attendance", headers=teacher_headers).status_code == 404
+    assert client.get(f"/students/{student_id}/marks", headers=teacher_headers).status_code == 404
     # Existing records are not cascade-deleted by the soft-delete operation.
     with main.SessionLocal() as db:
         row = db.get(main.Student, student_id)
