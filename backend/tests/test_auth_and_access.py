@@ -454,3 +454,67 @@ def test_student_update_rejects_completed_pages_above_total(client):
         "total_pages": 10, "completed_pages": 11
     })
     assert response.status_code == 422
+
+
+def test_teacher_can_create_update_and_delete_reading_entry(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    student = client.post("/students", headers=headers, json={
+        "student_code": "QJ-READING-CRUD", "name": "Reading CRUD Child"
+    }).json()
+    student_id = student["id"]
+
+    created = client.post(f"/students/{student_id}/reading", headers=headers, json={
+        "entry_date": "2026-10-20T00:00:00", "new_lesson": "Al-Baqarah 1-5", "pages": "2"
+    })
+    assert created.status_code == 201, created.text
+    entry_id = created.json()["id"]
+
+    updated = client.patch(f"/students/{student_id}/reading/{entry_id}", headers=headers, json={
+        "new_lesson": "Al-Baqarah 1-7", "pages": "3", "remarks": "Updated"
+    })
+    assert updated.status_code == 200, updated.text
+    rows = client.get(f"/students/{student_id}/reading", headers=headers).json()
+    assert len(rows) == 1
+    assert rows[0]["new_lesson"] == "Al-Baqarah 1-7"
+    assert rows[0]["pages"] == "3"
+    assert rows[0]["remarks"] == "Updated"
+
+    deleted = client.delete(f"/students/{student_id}/reading/{entry_id}", headers=headers)
+    assert deleted.status_code == 204
+    assert client.get(f"/students/{student_id}/reading", headers=headers).json() == []
+
+
+def test_reading_entry_mutations_are_teacher_only_and_student_scoped(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    first = client.post("/students", headers=headers, json={
+        "student_code": "QJ-READING-SCOPE-A", "name": "Reading Scope A"
+    }).json()
+    second = client.post("/students", headers=headers, json={
+        "student_code": "QJ-READING-SCOPE-B", "name": "Reading Scope B"
+    }).json()
+    entry = client.post(f"/students/{first['id']}/reading", headers=headers, json={
+        "entry_date": "2026-10-20T00:00:00", "new_lesson": "Protected"
+    }).json()
+
+    wrong_student = client.patch(f"/students/{second['id']}/reading/{entry['id']}", headers=headers, json={
+        "new_lesson": "Should not change"
+    })
+    wrong_delete = client.delete(f"/students/{second['id']}/reading/{entry['id']}", headers=headers)
+    assert wrong_student.status_code == 404
+    assert wrong_delete.status_code == 404
+    rows = client.get(f"/students/{first['id']}/reading", headers=headers).json()
+    assert rows[0]["new_lesson"] == "Protected"
+
+    parent_created = client.post("/parents", headers=headers, json={
+        "login_id": "parent_reading_mutation", "password": "Parent-Reading-Mutation-123!",
+        "student_ids": [first["id"]]
+    })
+    assert parent_created.status_code == 201
+    parent_token = login(client, "parent_reading_mutation", "Parent-Reading-Mutation-123!").json()["access_token"]
+    parent_headers = auth(parent_token)
+    assert client.patch(f"/students/{first['id']}/reading/{entry['id']}", headers=parent_headers, json={
+        "new_lesson": "Unauthorized"
+    }).status_code == 403
+    assert client.delete(f"/students/{first['id']}/reading/{entry['id']}", headers=parent_headers).status_code == 403
