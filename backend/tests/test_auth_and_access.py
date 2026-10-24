@@ -115,3 +115,13 @@ def test_import_caps_completed_pages_at_total_pages(client):
     imported_student = next(row for row in students if row["name"] == "Page Cap")
     assert imported_student["completed_pages"] == 10
 
+def test_reimport_without_photo_does_not_erase_existing_photo(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    first = client.post("/migration/localstorage", headers=headers, json={"students":[{"id":"legacy-photo-keep","name":"Photo Keep","totalPages":604}], "photos":{"Photo Keep":"data:image/jpeg;base64,KEEP"}})
+    assert first.status_code == 200, first.text
+    second = client.post("/migration/localstorage", headers=headers, json={"students":[{"id":"legacy-photo-keep","name":"Photo Keep","totalPages":604}]})
+    assert second.status_code == 200, second.text
+    students = client.get("/students", headers=headers).json()
+    row = next(student for student in students if student["name"] == "Photo Keep")
+    assert row["photo_data"] == "data:image/jpeg;base64,KEEP"
