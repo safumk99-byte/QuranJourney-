@@ -211,6 +211,15 @@ class MarkInput(BaseModel):
     mu: int = Field(default=0, ge=0, le=1000)
     remarks: str | None = None
 
+    @model_validator(mode="after")
+    def validate_score_total(self):
+        score_total = self.s + self.ms + self.mu
+        if score_total > 1000:
+            raise ValueError("S + MS + MU cannot exceed 1000")
+        if self.points != score_total:
+            raise ValueError("points must equal S + MS + MU")
+        return self
+
 app = FastAPI(title="Quran Journey API", version="0.1.0")
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "https://safumk99-byte.github.io").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
