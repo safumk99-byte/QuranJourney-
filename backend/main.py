@@ -334,6 +334,25 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                     imported["attendance_created"] += 1
         except (ValueError, TypeError):
             imported["skipped"] += 1
+    # Recompute imported progress from backup base pages and all legacy entries.
+    base_pages = data.reading_base_pages or {}
+    pages_by_student = {}
+    for item in data.reading_entries:
+        sid = str(item.get("studentId", "")).strip()
+        try:
+            pages = max(0, int(item.get("pages") or 0))
+        except (ValueError, TypeError):
+            pages = 0
+        pages_by_student[sid] = pages_by_student.get(sid, 0) + pages
+    for legacy_id, student in by_legacy.items():
+        if legacy_id in base_pages:
+            try:
+                base = max(0, int(base_pages.get(legacy_id) or 0))
+            except (ValueError, TypeError):
+                imported["skipped"] += 1
+                continue
+            student.completed_pages = min(student.total_pages, base + pages_by_student.get(legacy_id, 0))
+
     # Marks are name/date based in the legacy UI; preserve S/MS/MU and total.
     for item in data.daily_marks:
         try:
