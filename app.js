@@ -1,8 +1,12 @@
 (()=>{'use strict';
-const KEY='quranJourney.students.v1', $=id=>document.getElementById(id);
-let students=load(),toastTimer;
+const KEY='quranJourney.students.v1', MARKS_KEY='quranJourney.dailyMarks.v1', $=id=>document.getElementById(id);
+let students=load(),marks=loadMarks(),toastTimer;
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(x)?x:[]}catch{return []}}
 function save(){localStorage.setItem(KEY,JSON.stringify(students))}
+function loadMarks(){try{const x=JSON.parse(localStorage.getItem(MARKS_KEY)||'[]');return Array.isArray(x)?x:[]}catch{return []}}
+function saveMarks(){localStorage.setItem(MARKS_KEY,JSON.stringify(marks))}
+function renderMarks(){const body=$('marksRows');body.innerHTML=[...marks].sort((a,b)=>b.date.localeCompare(a.date)||a.name.localeCompare(b.name)).map(m=>'<tr><td>'+esc(m.date)+'</td><td>'+esc(m.name)+'</td><td>'+esc(m.s)+'</td><td>'+esc(m.ms)+'</td><td>'+esc(m.mu)+'</td><td><strong>'+esc(m.total)+'</strong></td><td><button type="button" class="mini-btn" data-mark-delete="'+m.id+'">Delete</button></td></tr>').join('');$('marksEmpty').hidden=marks.length>0}
+
 function num(id){return Number($(id).value)}
 function remaining(s){return Math.max(0,s.totalPages-s.completedPages)}
 function elapsedDays(start){if(!start)return 0;const a=new Date(start+'T12:00:00'),b=new Date();b.setHours(12,0,0,0);return Math.max(1,Math.floor((b-a)/86400000)+1)}
@@ -24,5 +28,5 @@ $('studentForm').addEventListener('submit',e=>{e.preventDefault();if(!validForm(
 ['totalPages','completedPages','journeyStartDate'].forEach(id=>$(id).addEventListener('input',updatePreview));
 $('cancelEdit').addEventListener('click',resetForm);$('search').addEventListener('input',render);$('filterClass').addEventListener('change',render);
 $('studentsList').addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(!b)return;const s=students.find(x=>x.id===b.dataset.id);if(!s)return;switch(b.dataset.action){case'edit':$('studentId').value=s.id;$('name').value=s.name;$('className').value=s.className==='Unassigned class'?'':s.className;$('totalPages').value=s.totalPages;$('completedPages').value=s.completedPages;$('journeyStartDate').value=startDate(s);$('formTitle').textContent='Edit Student Details';$('saveBtn').textContent='Save Changes';$('cancelEdit').hidden=false;updatePreview();$('name').focus();window.scrollTo({top:0,behavior:'smooth'});break;case'delete':if(confirm('Delete the details for '+s.name+'?')){students=students.filter(x=>x.id!==s.id);save();render();toast('Student deleted.')}break;case'update-pages':{const input=document.querySelector('[data-pages-for="'+s.id+'"]'),v=Number(input.value);if(!Number.isInteger(v)||v<0||v>s.totalPages){alert('Pages completed must be between 0 and '+s.totalPages+'.');input.value=s.completedPages;return}s.completedPages=v;s.dailyPages=v/elapsedDays(startDate(s));s.updatedAt=new Date().toISOString();save();render();toast(v===s.totalPages?'Congratulations! Quran journey completed.':'Progress saved.');break}}});
-$('journeyStartDate').value=today();updatePreview();render();
+$('journeyStartDate').value=today();$('marksDate').value=today();$('marksForm').addEventListener('submit',e=>{e.preventDefault();const name=$('marksName').value.trim(),date=$('marksDate').value,vals=['marksS','marksMS','marksMU','marksTotal'].map(id=>Number($(id).value));if(!name||!date||date>today()||vals.some(v=>!Number.isFinite(v)||v<0)){alert('Please enter a name, a valid date, and non-negative points.');return}marks.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),date,name,s:vals[0],ms:vals[1],mu:vals[2],total:vals[3]});saveMarks();renderMarks();$('marksName').value='';['marksS','marksMS','marksMU','marksTotal'].forEach(id=>$(id).value='0');toast('Daily points row added.');});$('marksRows').addEventListener('click',e=>{const b=e.target.closest('[data-mark-delete]');if(!b)return;if(confirm('Delete this points row?')){marks=marks.filter(m=>m.id!==b.dataset.markDelete);saveMarks();renderMarks();}});updatePreview();render();renderMarks();
 })();
