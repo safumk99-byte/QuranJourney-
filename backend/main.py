@@ -248,6 +248,27 @@ def check_student_access(student_id: int, user: User, db: Session) -> None:
     if user.role != "parent" or student_id not in (allowed_student_ids(user, db) or set()):
         raise HTTPException(status_code=403, detail="You cannot access this student's records")
 
+def reading_page_count(value: str | None) -> int:
+    """Count only plain non-negative whole-page values; ignore labels/ranges."""
+    if value is None:
+        return 0
+    try:
+        number = float(value.strip())
+        return int(number) if number >= 0 and number.is_integer() else 0
+    except (ValueError, TypeError):
+        return 0
+
+def adjust_completed_pages(db: Session, student_id: int, delta: int) -> None:
+    if not delta:
+        return
+    student = db.get(Student, student_id)
+    if student is None:
+        return
+    student.completed_pages = min(
+        student.total_pages,
+        max(0, student.completed_pages + delta),
+    )
+
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
@@ -511,12 +532,16 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
     row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
     if row is None:
         raise HTTPException(status_code=404, detail="Reading entry not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    old_pages = reading_page_count(row.pages)
+    values = data.model_dump(exclude_unset=True)
+    for key, value in values.items():
         if key == "entry_date":
             if value is None:
                 raise HTTPException(status_code=422, detail="Entry date cannot be null")
             value = value.date()
         setattr(row, key, value)
+    if "pages" in values:
+        adjust_completed_pages(db, student_id, reading_page_count(row.pages) - old_pages)
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
@@ -526,6 +551,7 @@ def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_
     row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
     if row is None:
         raise HTTPException(status_code=404, detail="Reading entry not found")
+    adjust_completed_pages(db, student_id, -reading_page_count(row.pages))
     db.delete(row)
     db.commit()
     return Response(status_code=204)
@@ -535,6 +561,7 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
+    adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     db.add(row)
     db.commit()
     db.refresh(row)
