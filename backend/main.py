@@ -9,7 +9,7 @@ import jwt
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pwdlib import PasswordHash
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
@@ -130,6 +130,41 @@ class StudentInput(BaseModel):
             return None
         value = value.strip()
         return value or None
+
+class StudentUpdateInput(BaseModel):
+    student_code: str | None = Field(default=None, min_length=1, max_length=80)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    class_name: str | None = Field(default=None, max_length=100)
+    total_pages: int | None = Field(default=None, ge=1, le=2000)
+    completed_pages: int | None = Field(default=None, ge=0, le=2000)
+    current_juz: int | None = Field(default=None, ge=1, le=30)
+    journey_start_date: date | None = None
+    photo_data: str | None = None
+
+    @field_validator("student_code", "name")
+    @classmethod
+    def strip_optional_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank")
+        return value
+
+    @field_validator("class_name")
+    @classmethod
+    def normalize_optional_class_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def validate_progress(self):
+        if self.total_pages is not None and self.completed_pages is not None and self.completed_pages > self.total_pages:
+            raise ValueError("Completed pages cannot exceed total pages")
+        return self
+
 
 class ParentInput(BaseModel):
     login_id: str = Field(min_length=3, max_length=80)
@@ -270,6 +305,39 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name}
+
+@app.patch("/students/{student_id}")
+def update_student(student_id: int, data: StudentUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    student = db.scalar(select(Student).where(Student.id == student_id, Student.is_active.is_(True)))
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    values = data.model_dump(exclude_unset=True)
+    if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
+        raise HTTPException(status_code=409, detail="Student code already exists")
+    total_pages = values.get("total_pages", student.total_pages)
+    completed_pages = values.get("completed_pages", student.completed_pages)
+    if completed_pages > total_pages:
+        raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
+    for key, value in values.items():
+        setattr(student, key, value)
+    db.commit()
+    db.refresh(student)
+    return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
+            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
+            "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
+            "photo_data": student.photo_data}
+
+
+@app.delete("/students/{student_id}", status_code=204)
+def delete_student(student_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    student = db.scalar(select(Student).where(Student.id == student_id, Student.is_active.is_(True)))
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    # Soft-delete so accidental removal does not cascade-delete reading, attendance, marks, or parent links.
+    student.is_active = False
+    db.commit()
+    return Response(status_code=204)
+
 
 @app.post("/parents", status_code=201)
 def create_parent(data: ParentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
