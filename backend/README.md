@@ -37,3 +37,8 @@ Interactive API docs are available at `/docs` after deployment.
 - The current static website has not yet been switched to this API. Keep the existing site in use until backup/export, API deployment, role tests, and frontend integration are completed.
 - Database schema creation is suitable for the initial scaffold; use versioned migrations before production schema changes.
 - Never commit real credentials, tokens, or a Neon connection string to GitHub.
+
+## Frontend authentication foundation
+The static frontend now has `login.html`, `auth.js`, `config.js`, and a read-only `parent.html` view. Before frontend sign-in can reach the API, set `window.QURAN_JOURNEY_CONFIG.API_BASE_URL` in the root `config.js` to the public Render service URL (for example, `https://your-api.onrender.com`, with no trailing slash). Do not put the Neon connection string or JWT signing secret in this file.
+
+The teacher pages are protected by role checks. Existing student and daily-mark features still use browser localStorage; they have not yet been migrated or synchronized with PostgreSQL. Do not assume old browser records have been imported. Parent record views read from the API and will show only records stored there for students linked to that parent.
