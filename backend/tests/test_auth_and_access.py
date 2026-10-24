@@ -43,3 +43,36 @@ def test_parent_cannot_read_unlinked_student_records(client):
     parent_token = login(client, "parent_test", "Parent-Test-Password-123!").json()["access_token"]
     denied = client.get(f"/students/{other['id']}/reading", headers=auth(parent_token))
     assert denied.status_code == 403
+
+def test_teacher_can_import_local_backup_without_duplicate_rows(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    backup = {
+        "students": [{
+            "id": "legacy-student-1", "name": "Amina", "className": "Class 2",
+            "totalPages": 604, "completedPages": 45, "currentJuz": 3,
+            "journeyStartDate": "2026-01-01"
+        }],
+        "photos": {"Amina": "data:image/jpeg;base64,TEST"},
+        "daily_marks": [{"id": "mark-1", "date": "2026-10-20", "name": "Amina", "s": 2, "ms": 3, "mu": 4, "total": 9}],
+        "reading_entries": [{
+            "id": "entry-1", "studentId": "legacy-student-1", "date": "2026-10-20",
+            "newLesson": "Al-Baqarah 1-5", "pages": 2, "recentRevision": "Al-Fatiha",
+            "generalRevision": "Juz 1", "attendance": "Present", "remarks": "Good"
+        }],
+        "reading_base_pages": {"legacy-student-1": 43}
+    }
+    first = client.post("/migration/localstorage", headers=headers, json=backup)
+    assert first.status_code == 200, first.text
+    assert first.json()["imported"]["students_created"] == 1
+    assert first.json()["imported"]["reading_entries_created"] == 1
+    assert first.json()["imported"]["daily_marks_created"] == 1
+    second = client.post("/migration/localstorage", headers=headers, json=backup)
+    assert second.status_code == 200, second.text
+    assert second.json()["imported"]["students_created"] == 0
+    assert second.json()["imported"]["reading_entries_created"] == 0
+    assert second.json()["imported"]["daily_marks_created"] == 0
+    students = client.get("/students", headers=headers).json()
+    assert len(students) == 1
+    assert students[0]["completed_pages"] == 45
+    assert students[0]["current_juz"] == 3
