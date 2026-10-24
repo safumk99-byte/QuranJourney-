@@ -190,6 +190,14 @@ class ReadingInput(BaseModel):
     general_revision: str | None = None
     remarks: str | None = None
 
+class ReadingUpdateInput(BaseModel):
+    entry_date: datetime | None = None
+    new_lesson: str | None = None
+    pages: str | None = Field(default=None, max_length=200)
+    recent_revision: str | None = None
+    general_revision: str | None = None
+    remarks: str | None = None
+
 class AttendanceInput(BaseModel):
     attendance_date: datetime
     status: str
