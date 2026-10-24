@@ -298,7 +298,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                 "completed_pages": max(0, min(max(1, min(2000, int(item.get("totalPages") or 604))), int(item.get("completedPages") or 0))),
                 "current_juz": max(1, min(30, int(item.get("currentJuz") or 1))),
                 "journey_start_date": datetime.fromisoformat(str(item.get("journeyStartDate") or item.get("createdAt") or datetime.now(timezone.utc).date()).replace("Z","+00:00")).date(),
-                "photo_data": data.photos.get(name),
+                "photo_data": data.photos.get(name) if name in data.photos else (row.photo_data if row is not None else None),
             }
             if row is None:
                 row = Student(**values, legacy_id=legacy_id)
