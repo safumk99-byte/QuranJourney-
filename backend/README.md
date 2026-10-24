@@ -17,7 +17,7 @@ This service is a backend foundation for moving Quran Journey data from browser-
    - `INITIAL_TEACHER_ID`: desired first teacher login ID.
    - `INITIAL_TEACHER_PASSWORD`: unique password of at least 12 characters.
    - `CORS_ORIGINS`: `https://safumk99-byte.github.io`
-   - `ACCESS_TOKEN_MINUTES`: `60`
+   - `ACCESS_TOKEN_MINUTES`: `43200` (30 days by default; tokens expire and users must sign in again after expiry).
 5. The service creates its initial tables at startup and seeds the first teacher only if the configured ID does not already exist.
 
 ## API
@@ -49,7 +49,7 @@ Interactive API docs are available at `/docs` after deployment.
 
 The endpoint is deliberately teacher-only. Parent accounts cannot import or modify data. Photos are stored as data URLs and can increase database size substantially; review the backup size before importing. The route currently supports up to 5,000 students, 20,000 marks and 50,000 reading entries per request. For very large backups, split the payload into smaller batches only after preserving the original backup.
 
-The schema update uses additive PostgreSQL `ADD COLUMN IF NOT EXISTS` statements and creates partial unique indexes for legacy IDs; it does not drop tables or records. The existing localStorage data is not changed by importing.
+The schema update uses additive PostgreSQL `ADD COLUMN IF NOT EXISTS` statements, safely upgrades `students.completed_pages` to a fractional numeric type for half-page progress, and creates partial unique indexes for legacy IDs; it does not drop tables or records. The existing localStorage data is not changed by importing.
 
 ## Frontend authentication foundation
 The static frontend now has `login.html`, `auth.js`, `config.js`, and a read-only `parent.html` view. Before frontend sign-in can reach the API, set `window.QURAN_JOURNEY_CONFIG.API_BASE_URL` in the root `config.js` to the public Render service URL (for example, `https://your-api.onrender.com`, with no trailing slash). Do not put the Neon connection string or JWT signing secret in this file.
