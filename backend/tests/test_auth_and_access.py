@@ -1,0 +1,45 @@
+def login(client, login_id, password):
+    return client.post("/auth/login", json={"login_id": login_id, "password": password})
+
+def auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+def test_health_endpoint(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+def test_teacher_can_create_student(client):
+    token_response = login(client, "test_teacher", "Test-Teacher-Password-123!")
+    assert token_response.status_code == 200
+    token = token_response.json()["access_token"]
+    response = client.post("/students", headers=auth(token), json={"student_code":"T-001", "name":"Test Student", "class_name":"Class 1"})
+    assert response.status_code == 201
+    assert response.json()["student_code"] == "T-001"
+
+def test_invalid_password_is_rejected(client):
+    response = login(client, "test_teacher", "incorrect-password")
+    assert response.status_code == 401
+
+def test_parent_only_sees_linked_students(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    first = client.post("/students", headers=headers, json={"student_code":"T-001", "name":"Linked Child"}).json()
+    client.post("/students", headers=headers, json={"student_code":"T-002", "name":"Other Child"})
+    created = client.post("/parents", headers=headers, json={"login_id":"parent_test", "password":"Parent-Test-Password-123!", "student_ids":[first["id"]]})
+    assert created.status_code == 201
+    parent_token_response = login(client, "parent_test", "Parent-Test-Password-123!")
+    assert parent_token_response.status_code == 200
+    visible = client.get("/students", headers=auth(parent_token_response.json()["access_token"]))
+    assert visible.status_code == 200
+    assert [student["name"] for student in visible.json()] == ["Linked Child"]
+
+def test_parent_cannot_read_unlinked_student_records(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    first = client.post("/students", headers=headers, json={"student_code":"T-001", "name":"Linked Child"}).json()
+    other = client.post("/students", headers=headers, json={"student_code":"T-002", "name":"Other Child"}).json()
+    client.post("/parents", headers=headers, json={"login_id":"parent_test", "password":"Parent-Test-Password-123!", "student_ids":[first["id"]]})
+    parent_token = login(client, "parent_test", "Parent-Test-Password-123!").json()["access_token"]
+    denied = client.get(f"/students/{other['id']}/reading", headers=auth(parent_token))
+    assert denied.status_code == 403
