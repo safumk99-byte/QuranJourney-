@@ -59,6 +59,9 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
             "id": "entry-1", "studentId": "legacy-student-1", "date": "2026-10-20",
             "newLesson": "Al-Baqarah 1-5", "pages": 2, "recentRevision": "Al-Fatiha",
             "generalRevision": "Juz 1", "attendance": "Present", "remarks": "Good"
+        }, {
+            "id": "entry-invalid-date", "studentId": "legacy-student-1", "date": "not-a-date",
+            "newLesson": "Invalid test row", "pages": 100
         }],
         "reading_base_pages": {"legacy-student-1": 43}
     }
@@ -74,9 +77,9 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert second.json()["imported"]["daily_marks_created"] == 0
     students = client.get("/students", headers=headers).json()
     assert len(students) == 1
-    assert students[0]["completed_pages"] == 45
+    assert students[0]["completed_pages"] == 45  # invalid-date row must not add 100 pages
     # Re-import must recalculate from the backup, not add the same pages twice.
-    assert students[0]["completed_pages"] <= students[0]["total_pages"]
+    assert students[0]["completed_pages"] == 45
     assert students[0]["current_juz"] == 3
     assert students[0]["photo_data"] == "data:image/jpeg;base64,TEST"
     marks = client.get(f"/students/{students[0]['id']}/marks", headers=headers)
