@@ -114,6 +114,17 @@ class StudentInput(BaseModel):
     student_code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
     class_name: str | None = Field(default=None, max_length=100)
+    total_pages: int = Field(default=604, ge=1, le=2000)
+    completed_pages: int = Field(default=0, ge=0, le=2000)
+    current_juz: int = Field(default=1, ge=1, le=30)
+    journey_start_date: date | None = None
+    photo_data: str | None = None
+
+    @model_validator(mode="after")
+    def validate_progress(self):
+        if self.completed_pages > self.total_pages:
+            raise ValueError("Completed pages cannot exceed total pages")
+        return self
 
     @field_validator("student_code", "name")
     @classmethod
@@ -300,11 +311,18 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     if db.scalar(select(Student).where(Student.student_code == data.student_code.strip())):
         raise HTTPException(status_code=409, detail="Student code already exists")
-    student = Student(student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name)
+    student = Student(
+        student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name,
+        total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=data.current_juz,
+        journey_start_date=data.journey_start_date, photo_data=data.photo_data,
+    )
     db.add(student)
     db.commit()
     db.refresh(student)
-    return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name}
+    return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
+            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
+            "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
+            "photo_data": student.photo_data}
 
 @app.patch("/students/{student_id}")
 def update_student(student_id: int, data: StudentUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
