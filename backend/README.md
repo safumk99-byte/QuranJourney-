@@ -43,8 +43,8 @@ Interactive API docs are available at `/docs` after deployment.
 
 1. Open the existing website in the same browser profile that contains the teacher's local data.
 2. Sign in as Teacher and open `backup.html`; download the JSON backup. Keep it private because it can contain student names, photos, reading records and marks.
-3. The current API import route accepts the backup's `records` object as a normalized request body: rename `quranJourney.students.v1` to `students`, `quranJourney.photos.v1` to `photos`, `quranJourney.dailyMarks.v1` to `daily_marks`, `quranJourney.readingEntries.v1` to `reading_entries`, and `quranJourney.readingBasePages.v1` to `reading_base_pages`.
-4. Send it to `POST /migration/localstorage` with the teacher's bearer token. The import is additive and repeatable: stable legacy IDs prevent duplicate student, reading, attendance and marks rows on a retry. It never deletes existing records.
+3. Open `migration.html`, choose the downloaded JSON, click **Validate Backup**, review the counts, then click **Import to Database**. The page maps the backup keys to the API request format.
+4. The page sends the normalized payload to `POST /migration/localstorage` using the signed-in teacher token. The import is additive and repeatable: stable legacy IDs prevent duplicate student, reading, attendance and marks rows on a retry. It never deletes existing records.
 5. Check the returned import counts and compare student totals and sample reading history before switching the live site.
 
 The endpoint is deliberately teacher-only. Parent accounts cannot import or modify data. Photos are stored as data URLs and can increase database size substantially; review the backup size before importing. The route currently supports up to 5,000 students, 20,000 marks and 50,000 reading entries per request. For very large backups, split the payload into smaller batches only after preserving the original backup.
