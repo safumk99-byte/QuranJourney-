@@ -196,15 +196,21 @@ def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_
 
 class ReadingInput(BaseModel):
     entry_date: datetime
-    start_surah: int = Field(ge=1, le=114)
-    start_ayah: int = Field(ge=1, le=286)
-    end_surah: int = Field(ge=1, le=114)
-    end_ayah: int = Field(ge=1, le=286)
+    # Optional for backwards compatibility with older clients and imported records.
+    start_surah: int | None = Field(default=None, ge=1, le=114)
+    start_ayah: int | None = Field(default=None, ge=1, le=286)
+    end_surah: int | None = Field(default=None, ge=1, le=114)
+    end_ayah: int | None = Field(default=None, ge=1, le=286)
 
     @model_validator(mode="after")
     def validate_range(self):
-        validate_quran_range(self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
+        values = (self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
+        if any(value is not None for value in values):
+            if any(value is None for value in values):
+                raise ValueError("All four Surah/Ayah fields must be provided together")
+            validate_quran_range(self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
         return self
+
     new_lesson: str | None = None
     pages: str | None = Field(default=None, max_length=200)
     recent_revision: str | None = None
