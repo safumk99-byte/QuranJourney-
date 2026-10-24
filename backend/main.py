@@ -506,6 +506,30 @@ def get_reading(student_id: int, user: User = Depends(current_user), db: Session
     rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id == student_id).order_by(ReadingEntry.entry_date.desc(), ReadingEntry.id.desc())).all()
     return [{"id": r.id, "date": r.entry_date.isoformat(), "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "general_revision": r.general_revision, "remarks": r.remarks} for r in rows]
 
+@app.patch("/students/{student_id}/reading/{entry_id}")
+def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Reading entry not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        if key == "entry_date":
+            if value is None:
+                raise HTTPException(status_code=422, detail="Entry date cannot be null")
+            value = value.date()
+        setattr(row, key, value)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
+
+@app.delete("/students/{student_id}/reading/{entry_id}", status_code=204)
+def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.scalar(select(ReadingEntry).where(ReadingEntry.id == entry_id, ReadingEntry.student_id == student_id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Reading entry not found")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
 @app.post("/students/{student_id}/reading", status_code=201)
 def add_reading(student_id: int, data: ReadingInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     if not db.get(Student, student_id):
