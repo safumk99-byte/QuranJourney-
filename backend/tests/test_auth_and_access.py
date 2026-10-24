@@ -147,3 +147,24 @@ def test_import_skips_negative_or_out_of_range_marks(client):
     assert len(marks) == 1
     assert (marks[0]["s"], marks[0]["ms"], marks[0]["mu"], marks[0]["points"]) == (2, 3, 4, 9)
 
+def test_import_commit_failure_rolls_back_all_new_records(client, monkeypatch):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    backup = {
+        "students": [{"id": "legacy-rollback-1", "name": "Rollback Child"}],
+        "daily_marks": [{"id": "rollback-mark-1", "date": "2026-10-20", "name": "Rollback Child", "s": 1, "ms": 2, "mu": 3, "total": 6}],
+    }
+
+    def fail_commit(self):
+        raise RuntimeError("simulated database commit failure")
+
+    monkeypatch.setattr(main.Session, "commit", fail_commit)
+    import pytest
+    with pytest.raises(RuntimeError, match="simulated database commit failure"):
+        client.post("/migration/localstorage", headers=headers, json=backup)
+
+    # The endpoint's commit handler must roll back the student and mark together.
+    with main.SessionLocal() as db:
+        assert db.scalar(main.select(main.Student).where(main.Student.legacy_id == "legacy-rollback-1")) is None
+        assert db.scalar(main.select(main.DailyMark).where(main.DailyMark.legacy_id == "mark:rollback-mark-1")) is None
+
