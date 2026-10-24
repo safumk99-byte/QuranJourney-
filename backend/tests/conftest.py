@@ -1,4 +1,8 @@
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Keep tests isolated from the production Neon database.
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///./test_quran_journey.db"
