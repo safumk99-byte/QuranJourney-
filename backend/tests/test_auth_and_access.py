@@ -252,3 +252,37 @@ def test_frontend_api_contract_teacher_to_parent_read_flow(client):
     assert (marks[0]["s"], marks[0]["ms"], marks[0]["mu"], marks[0]["points"]) == (0, 0, 0, 9)
     assert marks[0]["remarks"] == "Excellent"
 
+def test_attendance_rejects_invalid_status_and_marks_enforce_point_bounds(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    student = client.post("/students", headers=headers, json={
+        "student_code": "QJ-VALIDATION-002", "name": "Validation Child"
+    }).json()
+    invalid_attendance = client.post(
+        f"/students/{student['id']}/attendance",
+        headers=headers,
+        json={"attendance_date": "2026-10-24", "status": "maybe"}
+    )
+    assert invalid_attendance.status_code == 422
+
+    for points in (-1, 1001):
+        invalid_mark = client.post(
+            f"/students/{student['id']}/marks",
+            headers=headers,
+            json={"mark_date": "2026-10-24", "points": points}
+        )
+        assert invalid_mark.status_code == 422
+
+    valid_attendance = client.post(
+        f"/students/{student['id']}/attendance",
+        headers=headers,
+        json={"attendance_date": "2026-10-24", "status": "present"}
+    )
+    assert valid_attendance.status_code == 201
+    valid_mark = client.post(
+        f"/students/{student['id']}/marks",
+        headers=headers,
+        json={"mark_date": "2026-10-24", "points": 1000}
+    )
+    assert valid_mark.status_code == 201
+
