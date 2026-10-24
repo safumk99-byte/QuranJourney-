@@ -559,3 +559,34 @@ def test_reading_entry_progress_never_exceeds_total_pages(client):
     assert response.status_code == 201, response.text
     visible = next(s for s in client.get("/students", headers=headers).json() if s["id"] == student_id)
     assert visible["completed_pages"] == 5
+
+def test_daily_marks_validate_breakdown_and_can_be_deleted(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    student = client.post("/students", headers=headers, json={
+        "student_code": "QJ-MARK-DELETE-001", "name": "Daily Mark Child"
+    }).json()
+    student_id = student["id"]
+
+    invalid = client.post(
+        f"/students/{student_id}/marks",
+        headers=headers,
+        json={"mark_date": "2026-10-24", "points": 8, "s": 2, "ms": 3, "mu": 4}
+    )
+    assert invalid.status_code == 422
+
+    created = client.post(
+        f"/students/{student_id}/marks",
+        headers=headers,
+        json={"mark_date": "2026-10-24", "points": 9, "s": 2, "ms": 3, "mu": 4}
+    )
+    assert created.status_code == 201, created.text
+    mark_id = created.json()["id"]
+    assert (created.json()["s"], created.json()["ms"], created.json()["mu"], created.json()["points"]) == (2, 3, 4, 9)
+
+    deleted = client.delete(f"/students/{student_id}/marks/{mark_id}", headers=headers)
+    assert deleted.status_code == 204
+    remaining = client.get(f"/students/{student_id}/marks", headers=headers)
+    assert remaining.status_code == 200
+    assert all(row["id"] != mark_id for row in remaining.json())
+
