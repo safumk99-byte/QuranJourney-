@@ -216,8 +216,10 @@ class MarkInput(BaseModel):
         score_total = self.s + self.ms + self.mu
         if score_total > 1000:
             raise ValueError("S + MS + MU cannot exceed 1000")
-        if self.points != score_total:
-            raise ValueError("points must equal S + MS + MU")
+        # Older API clients may submit points without the S/MS/MU breakdown.
+        # Keep that payload compatible while validating the new breakdown.
+        if any((self.s, self.ms, self.mu)) and self.points != score_total:
+            raise ValueError("points must equal S + MS + MU when a breakdown is provided")
         return self
 
 app = FastAPI(title="Quran Journey API", version="0.1.0")
