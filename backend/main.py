@@ -115,7 +115,7 @@ class StudentInput(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int = Field(default=604, ge=1, le=2000)
-    completed_pages: int = Field(default=0, ge=0, le=2000)
+    completed_pages: float = Field(default=0, ge=0, le=2000)
     current_juz: int = Field(default=1, ge=1, le=30)
     journey_start_date: date | None = None
     photo_data: str | None = None
@@ -147,7 +147,7 @@ class StudentUpdateInput(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int | None = Field(default=None, ge=1, le=2000)
-    completed_pages: int | None = Field(default=None, ge=0, le=2000)
+    completed_pages: float | None = Field(default=None, ge=0, le=2000)
     current_juz: int | None = Field(default=None, ge=1, le=30)
     journey_start_date: date | None = None
     photo_data: str | None = None
@@ -265,17 +265,22 @@ def check_student_access(student_id: int, user: User, db: Session) -> None:
     if user.role != "parent" or student_id not in (allowed_student_ids(user, db) or set()):
         raise HTTPException(status_code=403, detail="You cannot access this student's records")
 
-def reading_page_count(value: str | None) -> int:
-    """Count only plain non-negative whole-page values; ignore labels/ranges."""
+def reading_page_count(value: str | None) -> float:
+    """Count non-negative whole and half-page values; ignore labels/ranges."""
     if value is None:
-        return 0
+        return 0.0
     try:
         number = float(value.strip())
-        return int(number) if number >= 0 and number.is_integer() else 0
+        if number < 0 or number == float("inf") or number != number:
+            return 0.0
+        doubled = number * 2
+        if abs(doubled - round(doubled)) > 1e-9:
+            return 0.0
+        return round(number, 1)
     except (ValueError, TypeError):
-        return 0
+        return 0.0
 
-def adjust_completed_pages(db: Session, student_id: int, delta: int) -> None:
+def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
         return
     student = db.get(Student, student_id)
@@ -294,7 +299,7 @@ def startup() -> None:
         additive = {
             "students": {
                 "total_pages": "INTEGER NOT NULL DEFAULT 604",
-                "completed_pages": "INTEGER NOT NULL DEFAULT 0",
+                "completed_pages": "DOUBLE PRECISION NOT NULL DEFAULT 0",
                 "current_juz": "INTEGER NOT NULL DEFAULT 1",
                 "journey_start_date": "DATE NULL",
                 "photo_data": "TEXT NULL",
@@ -313,6 +318,9 @@ def startup() -> None:
             for table, columns in additive.items():
                 for column, definition in columns.items():
                     conn.execute(sql_text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {definition}'))
+            # Convert legacy integer progress to a fractional type without losing existing values.
+            conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" TYPE DOUBLE PRECISION USING "completed_pages"::double precision'))
+            conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" SET DEFAULT 0'))
             for table in ("students", "daily_marks", "reading_entries", "attendance"):
                 conn.execute(sql_text(f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table}_legacy_id" ON "{table}" ("legacy_id") WHERE "legacy_id" IS NOT NULL'))
     # Create the first teacher only when explicitly configured; never seed a default password.
@@ -494,15 +502,15 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
             # An entry with an invalid date is skipped by the import loop and must
             # not contribute to the completed-page total either.
             datetime.fromisoformat(str(item.get("date"))).date()
-            pages = max(0, int(item.get("pages") or 0))
+            pages = reading_page_count(str(item.get("pages") or 0))
         except (ValueError, TypeError):
             continue
-        pages_by_student[sid] = pages_by_student.get(sid, 0) + pages
+        pages_by_student[sid] = pages_by_student.get(sid, 0.0) + pages
     for legacy_id, student in by_legacy.items():
         if legacy_id not in base_pages:
             continue
         try:
-            base = max(0, int(base_pages.get(legacy_id) or 0))
+            base = max(0.0, float(base_pages.get(legacy_id) or 0))
         except (ValueError, TypeError):
             imported["skipped"] += 1
             continue
