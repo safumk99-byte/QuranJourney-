@@ -9,7 +9,7 @@ import jwt
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pwdlib import PasswordHash
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
@@ -114,6 +114,22 @@ class StudentInput(BaseModel):
     student_code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
     class_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("student_code", "name")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank")
+        return value
+
+    @field_validator("class_name")
+    @classmethod
+    def normalize_class_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 class ParentInput(BaseModel):
     login_id: str = Field(min_length=3, max_length=80)
