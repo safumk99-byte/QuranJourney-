@@ -314,3 +314,36 @@ def test_invalid_or_expired_bearer_token_is_rejected(client):
     expired_response = client.get("/auth/me", headers=auth(expired))
     assert expired_response.status_code == 401
 
+def test_parent_cannot_create_students_or_parent_accounts(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    student = client.post("/students", headers=teacher_headers, json={
+        "student_code": "QJ-ROLE-001", "name": "Role Boundary Child"
+    }).json()
+    parent_created = client.post("/parents", headers=teacher_headers, json={
+        "login_id": "parent_role_boundary", "password": "Parent-Role-Boundary-123!", "student_ids": [student["id"]]
+    })
+    assert parent_created.status_code == 201
+    parent_token = login(client, "parent_role_boundary", "Parent-Role-Boundary-123!").json()["access_token"]
+    parent_headers = auth(parent_token)
+
+    create_student = client.post("/students", headers=parent_headers, json={
+        "student_code": "QJ-PARENT-INJECT", "name": "Should Not Be Created"
+    })
+    create_parent = client.post("/parents", headers=parent_headers, json={
+        "login_id": "parent_injected", "password": "Injected-Parent-123!", "student_ids": [student["id"]]
+    })
+    assert create_student.status_code == 403
+    assert create_parent.status_code == 403
+
+    teacher_students = client.get("/students", headers=teacher_headers)
+    assert teacher_students.status_code == 200
+    assert all(row["name"] != "Should Not Be Created" for row in teacher_students.json())
+
+
+def test_protected_endpoints_reject_missing_authentication(client):
+    assert client.get("/auth/me").status_code == 401
+    assert client.get("/students").status_code == 401
+    assert client.post("/students", json={"student_code": "QJ-NO-AUTH", "name": "Unauthorized"}).status_code == 401
+    assert client.post("/migration/localstorage", json={"students": []}).status_code == 401
+
