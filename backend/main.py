@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -49,6 +49,12 @@ class Student(Base):
     student_code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     class_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    total_pages: Mapped[int] = mapped_column(Integer, default=604)
+    completed_pages: Mapped[int] = mapped_column(Integer, default=0)
+    current_juz: Mapped[int] = mapped_column(Integer, default=1)
+    journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     parent_links: Mapped[list["ParentStudent"]] = relationship(back_populates="student", cascade="all, delete-orphan")
 
@@ -69,6 +75,7 @@ class ReadingEntry(Base):
     recent_revision: Mapped[str | None] = mapped_column(Text, nullable=True)
     general_revision: Mapped[str | None] = mapped_column(Text, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Attendance(Base):
@@ -78,6 +85,7 @@ class Attendance(Base):
     attendance_date: Mapped[datetime] = mapped_column(Date, index=True)
     status: Mapped[str] = mapped_column(String(20))  # present, absent, leave
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
 
 class DailyMark(Base):
     __tablename__ = "daily_marks"
@@ -85,7 +93,18 @@ class DailyMark(Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     mark_date: Mapped[datetime] = mapped_column(Date, index=True)
     points: Mapped[int] = mapped_column(Integer, default=0)
+    score_s: Mapped[int] = mapped_column(Integer, default=0)
+    score_ms: Mapped[int] = mapped_column(Integer, default=0)
+    score_mu: Mapped[int] = mapped_column(Integer, default=0)
+    legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+class LegacyMigrationInput(BaseModel):
+    students: list[dict] = Field(default_factory=list, max_length=5000)
+    photos: dict[str, str] = Field(default_factory=dict)
+    daily_marks: list[dict] = Field(default_factory=list, max_length=20000)
+    reading_entries: list[dict] = Field(default_factory=list, max_length=50000)
+    reading_base_pages: dict[str, int | float] = Field(default_factory=dict)
 
 class LoginInput(BaseModel):
     login_id: str = Field(min_length=1, max_length=80)
@@ -162,6 +181,32 @@ def check_student_access(student_id: int, user: User, db: Session) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    # Additive, non-destructive migration for databases created by earlier scaffold versions.
+    if engine.dialect.name == "postgresql":
+        additive = {
+            "students": {
+                "total_pages": "INTEGER NOT NULL DEFAULT 604",
+                "completed_pages": "INTEGER NOT NULL DEFAULT 0",
+                "current_juz": "INTEGER NOT NULL DEFAULT 1",
+                "journey_start_date": "DATE NULL",
+                "photo_data": "TEXT NULL",
+                "legacy_id": "VARCHAR(120) NULL",
+            },
+            "daily_marks": {
+                "score_s": "INTEGER NOT NULL DEFAULT 0",
+                "score_ms": "INTEGER NOT NULL DEFAULT 0",
+                "score_mu": "INTEGER NOT NULL DEFAULT 0",
+                "legacy_id": "VARCHAR(120) NULL",
+            },
+            "reading_entries": {"legacy_id": "VARCHAR(120) NULL"},
+            "attendance": {"legacy_id": "VARCHAR(120) NULL"},
+        }
+        with engine.begin() as conn:
+            for table, columns in additive.items():
+                for column, definition in columns.items():
+                    conn.execute(sql_text(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {definition}'))
+            for table in ("students", "daily_marks", "reading_entries", "attendance"):
+                conn.execute(sql_text(f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table}_legacy_id" ON "{table}" ("legacy_id") WHERE "legacy_id" IS NOT NULL'))
     # Create the first teacher only when explicitly configured; never seed a default password.
     login_id = os.getenv("INITIAL_TEACHER_ID", "").strip()
     password = os.getenv("INITIAL_TEACHER_PASSWORD", "")
@@ -198,7 +243,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         if not ids:
             return []
         query = query.where(Student.id.in_(ids))
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name} for s in db.scalars(query.order_by(Student.name)).all()]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data} for s in db.scalars(query.order_by(Student.name)).all()]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -227,6 +272,88 @@ def create_parent(data: ParentInput, user: User = Depends(require_teacher), db: 
         db.add(ParentStudent(parent_user_id=parent.id, student_id=student.id))
     db.commit()
     return {"id": parent.id, "login_id": parent.login_id, "role": parent.role, "linked_students": len(students)}
+
+@app.post("/migration/localstorage")
+def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Idempotently import a downloaded Quran Journey localStorage backup. Never deletes existing records."""
+    imported = {"students_created": 0, "students_updated": 0, "reading_entries_created": 0, "attendance_created": 0, "daily_marks_created": 0, "skipped": 0}
+    by_legacy = {}
+    by_name = {}
+    # Create/update students first. Legacy IDs make repeated uploads safe.
+    for item in data.students:
+        try:
+            legacy_id = str(item.get("id", "")).strip()
+            name = str(item.get("name", "")).strip()
+            if not legacy_id or not name:
+                imported["skipped"] += 1
+                continue
+            row = db.scalar(select(Student).where(Student.legacy_id == legacy_id))
+            code = "QJ-LEGACY-" + legacy_id[:60]
+            if row is None:
+                row = db.scalar(select(Student).where(Student.student_code == code))
+            values = {
+                "student_code": code, "name": name[:160],
+                "class_name": str(item.get("className") or "Unassigned class")[:100],
+                "total_pages": max(1, min(2000, int(item.get("totalPages") or 604))),
+                "completed_pages": max(0, min(max(1, min(2000, int(item.get("totalPages") or 604))), int(item.get("completedPages") or 0))),
+                "current_juz": max(1, min(30, int(item.get("currentJuz") or 1))),
+                "journey_start_date": datetime.fromisoformat(str(item.get("journeyStartDate") or item.get("createdAt") or datetime.now(timezone.utc).date()).replace("Z","+00:00")).date(),
+                "photo_data": data.photos.get(name),
+            }
+            if row is None:
+                row = Student(**values, legacy_id=legacy_id)
+                db.add(row); db.flush()
+                imported["students_created"] += 1
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+                imported["students_updated"] += 1
+            by_legacy[legacy_id] = row
+            by_name[name.strip().lower()] = row
+        except (ValueError, TypeError):
+            imported["skipped"] += 1
+    db.flush()
+    # Legacy reading entries reference local student IDs. Persist original values and stable IDs.
+    for item in data.reading_entries:
+        try:
+            sid = str(item.get("studentId", "")).strip()
+            student = by_legacy.get(sid) or db.scalar(select(Student).where(Student.legacy_id == sid))
+            if not student:
+                imported["skipped"] += 1; continue
+            legacy_id = "reading:" + str(item.get("id") or f"{sid}:{item.get('date')}:{item.get('newLesson','')}")
+            if db.scalar(select(ReadingEntry).where(ReadingEntry.legacy_id == legacy_id)):
+                continue
+            entry_date = datetime.fromisoformat(str(item.get("date"))).date()
+            row = ReadingEntry(student_id=student.id, entry_date=entry_date, new_lesson=item.get("newLesson"), pages=str(item.get("pages") or 0), recent_revision=item.get("recentRevision"), general_revision=item.get("generalRevision"), remarks=item.get("remarks"), legacy_id=legacy_id)
+            db.add(row); imported["reading_entries_created"] += 1
+            if item.get("attendance") in {"Present","Absent","Leave","present","absent","leave"}:
+                status_value = str(item.get("attendance")).lower()
+                aid = f"attendance:{sid}:{item.get('date')}:{item.get('id','')}"
+                if not db.scalar(select(Attendance).where(Attendance.legacy_id == aid)):
+                    db.add(Attendance(student_id=student.id, attendance_date=entry_date, status=status_value.lower(), remarks=item.get("remarks"), legacy_id=aid))
+                    imported["attendance_created"] += 1
+        except (ValueError, TypeError):
+            imported["skipped"] += 1
+    # Marks are name/date based in the legacy UI; preserve S/MS/MU and total.
+    for item in data.daily_marks:
+        try:
+            name = str(item.get("name") or "").strip().lower()
+            student = by_name.get(name)
+            if not student:
+                student = db.scalar(select(Student).where(Student.name.ilike(name))) if name else None
+            if not student:
+                imported["skipped"] += 1; continue
+            legacy_id = "mark:" + str(item.get("id") or f"{name}:{item.get('date')}:{item.get('total',0)}")
+            if db.scalar(select(DailyMark).where(DailyMark.legacy_id == legacy_id)):
+                continue
+            mark_date = datetime.fromisoformat(str(item.get("date"))).date()
+            s, ms, mu = int(item.get("s") or 0), int(item.get("ms") or 0), int(item.get("mu") or 0)
+            db.add(DailyMark(student_id=student.id, mark_date=mark_date, points=int(item.get("total") or s+ms+mu), score_s=s, score_ms=ms, score_mu=mu, legacy_id=legacy_id))
+            imported["daily_marks_created"] += 1
+        except (ValueError, TypeError):
+            imported["skipped"] += 1
+    db.commit()
+    return {"status": "ok", "imported": imported, "message": "Import is additive; existing records were not deleted."}
 
 @app.get("/students/{student_id}/reading")
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
