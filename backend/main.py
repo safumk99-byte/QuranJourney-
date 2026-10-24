@@ -68,6 +68,10 @@ class ParentStudent(Base):
 class ReadingEntry(Base):
     __tablename__ = "reading_entries"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     entry_date: Mapped[datetime] = mapped_column(Date, index=True)
     new_lesson: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -311,7 +315,7 @@ def startup() -> None:
                 "score_mu": "INTEGER NOT NULL DEFAULT 0",
                 "legacy_id": "VARCHAR(120) NULL",
             },
-            "reading_entries": {"legacy_id": "VARCHAR(120) NULL"},
+            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL"},
         }
         with engine.begin() as conn:
