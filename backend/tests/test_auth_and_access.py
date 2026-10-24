@@ -366,3 +366,26 @@ def test_attendance_rejects_bad_date_without_saving(client):
     assert response.status_code == 422
     assert client.get(f"/students/{student['id']}/attendance", headers=headers).json() == []
 
+def test_student_creation_rejects_blank_or_overlong_fields(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    blank_name = client.post("/students", headers=headers, json={"student_code": "BAD-NAME", "name": "   "})
+    long_code = client.post("/students", headers=headers, json={"student_code": "C" * 81, "name": "Valid Name"})
+    long_name = client.post("/students", headers=headers, json={"student_code": "BAD-LONG-NAME", "name": "N" * 161})
+    assert blank_name.status_code == 422
+    assert long_code.status_code == 422
+    assert long_name.status_code == 422
+
+
+def test_parent_creation_rejects_short_password_and_empty_student_list(client):
+    token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(token)
+    short_password = client.post("/parents", headers=headers, json={
+        "login_id": "parent_short_pw", "password": "short", "student_ids": [1]
+    })
+    no_students = client.post("/parents", headers=headers, json={
+        "login_id": "parent_no_kids", "password": "Valid-Password-123!", "student_ids": []
+    })
+    assert short_password.status_code == 422
+    assert no_students.status_code == 422
+
