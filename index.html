@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="./icon.svg">
 </head>
 <body>
-<header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Every child's journey with the Quran</div></div><div class="top-pill">Teacher Dashboard</div></header>
+<header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Every child's journey with the Quran</div></div><a class="top-pill nav-pill" href="./students.html">Students Directory</a></header>
 <main class="container">
 <section class="hero"><div><div class="eyebrow">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div><h1>Every page is progress.</h1><p>Track students' learning progress and inspire their journey with the Quran.</p></div><div class="hero-art" aria-hidden="true">۞<span>القرآن الكريم</span></div></section>
 <section class="stats" id="stats"></section>
@@ -22,7 +22,7 @@
 <label>Student Name<input id="name" required maxlength="80" placeholder="Enter student name"></label>
 <label>Student Photo (optional)<input id="photo" type="file" accept="image/*"><span class="photo-help">Choose a photo from your phone. It will be stored locally in this browser.</span></label><div id="photoPreview" class="photo-preview" hidden><img id="photoPreviewImg" alt="Selected student photo"><button class="mini-btn" type="button" id="removePhoto">Remove Photo</button></div>
 <div class="field-row"><label>Class / Batch<input id="className" maxlength="40" placeholder="e.g. Hifz 1"></label><label>Total Quran Pages<input id="totalPages" type="number" min="1" max="2000" value="604" required></label></div><label>Journey Start Date<input id="journeyStartDate" type="date" required><span class="photo-help">Select the date the student started reciting for a realistic daily average.</span></label>
-<div class="field-row"><label>Pages Completed<input id="completedPages" type="number" min="0" value="0" required></label><label>Average Pages per Day<input id="dailyPages" type="text" value="Calculated automatically" readonly aria-live="polite"><span class="photo-help">Calculated from pages completed ÷ days since the start date.</span></label></div>
+<div class="field-row"><label>Current Juz<input id="currentJuz" type="number" min="1" max="30" value="1" required><span class="photo-help">Select the Juz the student is currently reciting.</span></label><label>Pages Completed<input id="completedPages" type="number" min="0" value="0" required></label><label>Average Pages per Day<input id="dailyPages" type="text" value="Calculated automatically" readonly aria-live="polite"><span class="photo-help">Calculated from pages completed ÷ days since the start date.</span></label></div>
 <div class="preview" id="preview"><div class="preview-label">Estimated Completion</div><strong>—</strong><span>Calculated as you enter details</span></div>
 <div class="actions"><button class="btn primary" type="submit" id="saveBtn">＋ Add Student</button><button class="btn secondary" type="button" id="cancelEdit" hidden>Cancel</button></div>
 <p class="note">In this version, data is saved only in this browser on this device.</p>
