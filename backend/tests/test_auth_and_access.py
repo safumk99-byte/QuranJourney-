@@ -168,3 +168,37 @@ def test_import_commit_failure_rolls_back_all_new_records(client, monkeypatch):
         assert db.scalar(main.select(main.Student).where(main.Student.legacy_id == "legacy-rollback-1")) is None
         assert db.scalar(main.select(main.DailyMark).where(main.DailyMark.legacy_id == "mark:rollback-mark-1")) is None
 
+def test_parent_cannot_write_reading_attendance_or_marks(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    student = client.post("/students", headers=headers, json={"student_code": "T-PARENT-WRITE", "name": "Read Only Child"}).json()
+    parent_response = client.post("/parents", headers=headers, json={"login_id": "parent_read_only", "password": "Parent-Read-Only-123!", "student_ids": [student["id"]]})
+    assert parent_response.status_code == 201
+    parent_token = login(client, "parent_read_only", "Parent-Read-Only-123!").json()["access_token"]
+    parent_headers = auth(parent_token)
+
+    reading = client.post(f"/students/{student['id']}/reading", headers=parent_headers, json={"entry_date": "2026-10-24", "new_lesson": "Test"})
+    attendance = client.post(f"/students/{student['id']}/attendance", headers=parent_headers, json={"attendance_date": "2026-10-24", "status": "present"})
+    marks = client.post(f"/students/{student['id']}/marks", headers=parent_headers, json={"mark_date": "2026-10-24", "points": 5})
+    assert reading.status_code == 403
+    assert attendance.status_code == 403
+    assert marks.status_code == 403
+
+
+def test_parent_cannot_read_any_record_type_for_unlinked_student(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    headers = auth(teacher_token)
+    linked = client.post("/students", headers=headers, json={"student_code": "T-LINKED", "name": "Linked Record Child"}).json()
+    unlinked = client.post("/students", headers=headers, json={"student_code": "T-UNLINKED", "name": "Unlinked Record Child"}).json()
+    created = client.post("/parents", headers=headers, json={"login_id": "parent_link_scope", "password": "Parent-Link-Scope-123!", "student_ids": [linked["id"]]})
+    assert created.status_code == 201
+    parent_token = login(client, "parent_link_scope", "Parent-Link-Scope-123!").json()["access_token"]
+    parent_headers = auth(parent_token)
+
+    assert client.get(f"/students/{unlinked['id']}/reading", headers=parent_headers).status_code == 403
+    assert client.get(f"/students/{unlinked['id']}/attendance", headers=parent_headers).status_code == 403
+    assert client.get(f"/students/{unlinked['id']}/marks", headers=parent_headers).status_code == 403
+    assert client.get(f"/students/{linked['id']}/reading", headers=parent_headers).status_code == 200
+    assert client.get(f"/students/{linked['id']}/attendance", headers=parent_headers).status_code == 200
+    assert client.get(f"/students/{linked['id']}/marks", headers=parent_headers).status_code == 200
+
