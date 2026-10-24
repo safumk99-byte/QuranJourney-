@@ -206,6 +206,9 @@ class AttendanceInput(BaseModel):
 class MarkInput(BaseModel):
     mark_date: datetime
     points: int = Field(ge=0, le=1000)
+    s: int = Field(default=0, ge=0, le=1000)
+    ms: int = Field(default=0, ge=0, le=1000)
+    mu: int = Field(default=0, ge=0, le=1000)
     remarks: str | None = None
 
 app = FastAPI(title="Quran Journey API", version="0.1.0")
@@ -595,8 +598,17 @@ def get_marks(student_id: int, user: User = Depends(current_user), db: Session =
 def add_mark(student_id: int, data: MarkInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
-    row = DailyMark(student_id=student_id, mark_date=data.mark_date.date(), points=data.points, remarks=data.remarks)
+    row = DailyMark(student_id=student_id, mark_date=data.mark_date.date(), points=data.points, score_s=data.s, score_ms=data.ms, score_mu=data.mu, remarks=data.remarks)
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "student_id": row.student_id, "date": row.mark_date.isoformat(), "points": row.points}
+    return {"id": row.id, "student_id": row.student_id, "date": row.mark_date.isoformat(), "points": row.points, "s": row.score_s, "ms": row.score_ms, "mu": row.score_mu, "remarks": row.remarks}
+
+@app.delete("/students/{student_id}/marks/{mark_id}", status_code=204)
+def delete_mark(student_id: int, mark_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.scalar(select(DailyMark).where(DailyMark.id == mark_id, DailyMark.student_id == student_id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Daily mark not found")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
