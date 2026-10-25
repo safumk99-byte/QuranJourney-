@@ -629,6 +629,38 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
         raise
     return {"status": "ok", "imported": imported, "message": "Import is additive; existing records were not deleted."}
 
+@app.get("/points/leaderboard")
+def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Return all active students ranked by activity points earned from reading entries."""
+    active_students = db.scalars(select(Student).where(Student.is_active.is_(True))).all()
+    totals = {student.id: {"new_lesson_points": 0.0, "recent_revision_points": 0.0, "general_revision_points": 0.0} for student in active_students}
+    rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(Student.is_active.is_(True))).all()
+    def page_value(value):
+        try:
+            number = float(value or 0)
+            return number if number >= 0 else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+    for entry in rows:
+        bucket = totals.get(entry.student_id)
+        if bucket is None:
+            continue
+        bucket["new_lesson_points"] += page_value(entry.pages) * 10
+        bucket["recent_revision_points"] += page_value(entry.recent_pages)
+        bucket["general_revision_points"] += page_value(entry.general_pages)
+    students_by_id = {student.id: student for student in active_students}
+    result = []
+    for student_id, values in totals.items():
+        student = students_by_id[student_id]
+        total = values["new_lesson_points"] + values["recent_revision_points"] + values["general_revision_points"]
+        result.append({"student_id": student.id, "name": student.name, "class_name": student.class_name,
+            "new_lesson_points": values["new_lesson_points"], "recent_revision_points": values["recent_revision_points"],
+            "general_revision_points": values["general_revision_points"], "total_points": total})
+    result.sort(key=lambda item: (-item["total_points"], item["name"].casefold()))
+    for rank, item in enumerate(result, start=1):
+        item["rank"] = rank
+    return result
+
 @app.get("/students/{student_id}/reading")
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
