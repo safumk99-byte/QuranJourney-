@@ -95,7 +95,8 @@ class Attendance(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     attendance_date: Mapped[datetime] = mapped_column(Date, index=True)
-    status: Mapped[str] = mapped_column(String(20))  # present, absent, leave
+    status: Mapped[str] = mapped_column(String(20))  # present, late, absent, leave
+    period: Mapped[int] = mapped_column(Integer, default=1, index=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
 
@@ -256,6 +257,7 @@ class ReadingUpdateInput(BaseModel):
 class AttendanceInput(BaseModel):
     attendance_date: datetime
     status: str
+    period: int = Field(default=1, ge=1, le=3)
     remarks: str | None = None
 
 class MarkInput(BaseModel):
@@ -367,7 +369,7 @@ def startup() -> None:
                 "legacy_id": "VARCHAR(120) NULL",
             },
             "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL"},
-            "attendance": {"legacy_id": "VARCHAR(120) NULL"},
+            "attendance": {"legacy_id": "VARCHAR(120) NULL", "period": "INTEGER NOT NULL DEFAULT 1"},
         }
         with engine.begin() as conn:
             for table, columns in additive.items():
@@ -668,21 +670,27 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
 @app.get("/students/{student_id}/attendance")
 def get_attendance(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
-    rows = db.scalars(select(Attendance).where(Attendance.student_id == student_id).order_by(Attendance.attendance_date.desc())).all()
-    return [{"id": r.id, "date": r.attendance_date.isoformat(), "status": r.status, "remarks": r.remarks} for r in rows]
+    rows = db.scalars(select(Attendance).where(Attendance.student_id == student_id).order_by(Attendance.attendance_date.desc(), Attendance.period)).all()
+    return [{"id": r.id, "date": r.attendance_date.isoformat(), "status": r.status, "period": r.period, "remarks": r.remarks} for r in rows]
 
-@app.post("/students/{student_id}/attendance", status_code=201)
+@app.post("/students/{student_id}/attendance")
 def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
-    if data.status not in {"present", "absent", "leave"}:
-        raise HTTPException(status_code=422, detail="Status must be present, absent, or leave")
+    if data.status not in {"present", "late", "absent", "leave"}:
+        raise HTTPException(status_code=422, detail="Status must be present, late, absent, or leave")
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
-    row = Attendance(student_id=student_id, attendance_date=data.attendance_date.date(), status=data.status, remarks=data.remarks)
-    db.add(row)
+    day = data.attendance_date.date()
+    row = db.scalar(select(Attendance).where(Attendance.student_id == student_id, Attendance.attendance_date == day, Attendance.period == data.period).order_by(Attendance.id.desc()))
+    if row:
+        row.status = data.status
+        row.remarks = data.remarks
+    else:
+        row = Attendance(student_id=student_id, attendance_date=day, period=data.period, status=data.status, remarks=data.remarks)
+        db.add(row)
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "student_id": row.student_id, "date": row.attendance_date.isoformat(), "status": row.status}
+    return {"id": row.id, "student_id": row.student_id, "date": row.attendance_date.isoformat(), "period": row.period, "status": row.status}
 
 @app.get("/students/{student_id}/marks")
 def get_marks(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
