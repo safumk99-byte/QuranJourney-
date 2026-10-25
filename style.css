@@ -120,3 +120,15 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 .minus-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px}.minus-modal-head h2{margin:5px 0;color:var(--deep);font-size:22px}
 .minus-current-balance{display:grid;grid-template-columns:1fr auto;gap:8px 12px;background:#f3f8f4;border:1px solid #dce9df;border-radius:12px;padding:13px;margin:4px 0 18px;font-size:13px}.minus-current-balance span{color:var(--muted)}.minus-current-balance strong{color:var(--deep);text-align:right;font-variant-numeric:tabular-nums}.minus-deduction-preview{background:#fff0ed;color:#a7352b;border-radius:10px;padding:11px 13px;margin:-4px 0 16px;font-size:14px}.minus-modal textarea{width:100%;font:inherit;border:1px solid #dce6df;border-radius:10px;padding:12px;margin-top:7px;resize:vertical}.minus-modal-actions{display:flex;gap:10px;margin-top:8px}.minus-modal-actions .btn{flex:1}.minus-modal button:disabled{opacity:.65;cursor:wait}
 @media(max-width:560px){.minus-modal{padding:18px}.minus-modal-head h2{font-size:19px}.hero-actions{display:flex;flex-wrap:wrap;gap:9px}.dashboard-minus-action{padding:11px 13px}}
+
+/* Simplified daily progress form: range dropdowns replace redundant text inputs. */
+.student-detail-page #entryForm .progress-group{border:1px solid #e0eae3;border-radius:15px;padding:16px;background:#fbfdfb;min-width:0}
+.student-detail-page #entryForm .progress-group-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.student-detail-page #entryForm .progress-group-head h3{margin:0;color:#175b43;font-size:17px}
+.student-detail-page #entryForm .progress-group-head label{width:min(170px,45%);margin:0}
+.student-detail-page #entryForm .progress-group>small{display:block;color:#73857b;font-size:12px;line-height:1.5;margin-top:10px}
+.student-detail-page #entryForm .progress-group .range-grid{margin-top:0;gap:12px}
+.student-detail-page #entryForm .progress-group .range-grid label{margin:0}
+.student-detail-page #entryForm .field-row>label{margin:0}
+.student-detail-page #entryForm>.actions{justify-content:flex-end}
+@media(max-width:560px){.student-detail-page #entryForm .progress-group{padding:13px}.student-detail-page #entryForm .progress-group-head{align-items:flex-start}.student-detail-page #entryForm .progress-group-head h3{font-size:15px}.student-detail-page #entryForm .progress-group-head label{width:46%}}
