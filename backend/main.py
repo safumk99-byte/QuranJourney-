@@ -68,6 +68,20 @@ class ParentStudent(Base):
 class ReadingEntry(Base):
     __tablename__ = "reading_entries"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_pages: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    general_pages: Mapped[str | None] = mapped_column(String(20), nullable=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     entry_date: Mapped[datetime] = mapped_column(Date, index=True)
     new_lesson: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -182,21 +196,90 @@ class ParentInput(BaseModel):
     password: str = Field(min_length=10, max_length=256)
     student_ids: list[int] = Field(min_length=1)
 
+SURAH_AYAH_COUNTS = [7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6]
+
+def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_ayah: int) -> None:
+    if start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
+        raise ValueError("Ayah number exceeds the selected Surah's length")
+    if end_surah < start_surah or (end_surah == start_surah and end_ayah < start_ayah):
+        raise ValueError("End Surah/Ayah must not come before Start Surah/Ayah")
+
 class ReadingInput(BaseModel):
     entry_date: datetime
+    # Optional for backwards compatibility with older clients and imported records.
+    start_surah: int | None = Field(default=None, ge=1, le=114)
+    start_ayah: int | None = Field(default=None, ge=1, le=286)
+    end_surah: int | None = Field(default=None, ge=1, le=114)
+    end_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_start_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_end_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_end_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_start_surah: int | None = Field(default=None, ge=1, le=114)
+    general_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_end_surah: int | None = Field(default=None, ge=1, le=114)
+    general_end_ayah: int | None = Field(default=None, ge=1, le=286)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        for value, maximum in ((self.pages, 5), (self.recent_pages, 10), (self.general_pages, 10)):
+            if value is not None:
+                try:
+                    n = float(value)
+                except (TypeError, ValueError):
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+        for prefix in ("", "recent_", "general_"):
+            keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
+            values = tuple(getattr(self, key) for key in keys)
+            if any(value is not None for value in values):
+                if any(value is None for value in values):
+                    raise ValueError(f"All four Surah/Ayah fields must be provided together for {prefix or 'new lesson'}")
+                validate_quran_range(*values)
+        return self
+
     new_lesson: str | None = None
     pages: str | None = Field(default=None, max_length=200)
     recent_revision: str | None = None
+    recent_pages: str | None = Field(default="0", max_length=20)
     general_revision: str | None = None
+    general_pages: str | None = Field(default="0", max_length=20)
     remarks: str | None = None
 
 class ReadingUpdateInput(BaseModel):
     entry_date: datetime | None = None
+    start_surah: int | None = Field(default=None, ge=1, le=114)
+    start_ayah: int | None = Field(default=None, ge=1, le=286)
+    end_surah: int | None = Field(default=None, ge=1, le=114)
+    end_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_start_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_end_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_end_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_start_surah: int | None = Field(default=None, ge=1, le=114)
+    general_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_end_surah: int | None = Field(default=None, ge=1, le=114)
+    general_end_ayah: int | None = Field(default=None, ge=1, le=286)
     new_lesson: str | None = None
     pages: str | None = Field(default=None, max_length=200)
     recent_revision: str | None = None
+    recent_pages: str | None = Field(default=None, max_length=20)
     general_revision: str | None = None
+    general_pages: str | None = Field(default=None, max_length=20)
     remarks: str | None = None
+
+    @model_validator(mode="after")
+    def validate_activity_pages(self):
+        for value, maximum in ((self.pages, 5), (self.recent_pages, 10), (self.general_pages, 10)):
+            if value is not None:
+                try:
+                    n = float(value)
+                except (TypeError, ValueError):
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+        return self
 
 class AttendanceInput(BaseModel):
     attendance_date: datetime
@@ -542,7 +625,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id == student_id).order_by(ReadingEntry.entry_date.desc(), ReadingEntry.id.desc())).all()
-    return [{"id": r.id, "date": r.entry_date.isoformat(), "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "general_revision": r.general_revision, "remarks": r.remarks} for r in rows]
+    return [{"id": r.id, "date": r.entry_date.isoformat(), "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "recent_start_surah": r.recent_start_surah, "recent_start_ayah": r.recent_start_ayah, "recent_end_surah": r.recent_end_surah, "recent_end_ayah": r.recent_end_ayah, "general_start_surah": r.general_start_surah, "general_start_ayah": r.general_start_ayah, "general_end_surah": r.general_end_surah, "general_end_ayah": r.general_end_ayah, "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "recent_pages": r.recent_pages or "0", "general_revision": r.general_revision, "general_pages": r.general_pages or "0", "remarks": r.remarks} for r in rows]
 
 @app.patch("/students/{student_id}/reading/{entry_id}")
 def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -552,6 +635,20 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
         raise HTTPException(status_code=404, detail="Reading entry not found")
     old_pages = reading_page_count(row.pages)
     values = data.model_dump(exclude_unset=True)
+    combined = {"start_surah": row.start_surah, "start_ayah": row.start_ayah, "end_surah": row.end_surah, "end_ayah": row.end_ayah}
+    combined.update(values)
+    for prefix in ("", "recent_", "general_"):
+        keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
+        range_values = {key: getattr(row, key) for key in keys}
+        range_values.update({key: values[key] for key in keys if key in values})
+        supplied = tuple(range_values[key] for key in keys)
+        if any(value is not None for value in supplied):
+            if any(value is None for value in supplied):
+                raise HTTPException(status_code=422, detail=f"All four Surah/Ayah fields must be provided together for {prefix or 'new lesson'}")
+            try:
+                validate_quran_range(*supplied)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
     for key, value in values.items():
         if key == "entry_date":
             if value is None:
@@ -580,7 +677,15 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
     check_student_access(student_id, user, db)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
-    row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
+    surah_ayah_values = (data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
+    if any(value is not None for value in surah_ayah_values):
+        if any(value is None for value in surah_ayah_values):
+            raise HTTPException(status_code=422, detail="All four Surah/Ayah fields must be provided together")
+        try:
+            validate_quran_range(data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     db.add(row)
     db.commit()
