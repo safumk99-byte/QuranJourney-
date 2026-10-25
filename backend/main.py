@@ -221,6 +221,14 @@ class ReadingInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_range(self):
+        for value in (self.pages, self.recent_pages, self.general_pages):
+            if value is not None:
+                try:
+                    n = float(value)
+                except (TypeError, ValueError):
+                    raise ValueError("Page counts must be numbers from 0 to 5 in half-page increments")
+                if n < 0 or n > 5 or abs(n * 2 - round(n * 2)) > 1e-9:
+                    raise ValueError("Page counts must be numbers from 0 to 5 in half-page increments")
         values = (self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
         if any(value is not None for value in values):
             if any(value is None for value in values):
