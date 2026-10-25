@@ -625,7 +625,7 @@ def test_reading_entry_progress_never_exceeds_total_pages(client):
     }).json()
     student_id = student["id"]
     response = client.post(f"/students/{student_id}/reading", headers=headers, json={
-        "entry_date": "2026-10-24T00:00:00", "pages": "20"
+        "entry_date": "2026-10-24T00:00:00", "pages": "5"
     })
     assert response.status_code == 201, response.text
     visible = next(s for s in client.get("/students", headers=headers).json() if s["id"] == student_id)
