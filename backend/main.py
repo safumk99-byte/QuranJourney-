@@ -114,6 +114,51 @@ class DailyMark(Base):
     legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
+class DisciplineEntry(Base):
+    __tablename__ = "discipline_entries"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    reason: Mapped[str] = mapped_column(String(200))
+    points_deducted: Mapped[int] = mapped_column(Integer)
+    incident_date: Mapped[date] = mapped_column(Date, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    is_reversed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reversed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reversal_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+class DisciplineInput(BaseModel):
+    student_id: int = Field(gt=0)
+    reason: str = Field(min_length=2, max_length=200)
+    points_deducted: int = Field(gt=0, le=100)
+    incident_date: date
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Reason cannot be blank")
+        return value.strip()
+
+    @field_validator("notes")
+    @classmethod
+    def clean_notes(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+class DisciplineReverseInput(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+
+    @field_validator("reason")
+    @classmethod
+    def reversal_reason_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A correction reason is required")
+        return value.strip()
+
 class LegacyMigrationInput(BaseModel):
     students: list[dict] = Field(default_factory=list, max_length=5000)
     photos: dict[str, str] = Field(default_factory=dict)
@@ -628,6 +673,51 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
         db.rollback()
         raise
     return {"status": "ok", "imported": imported, "message": "Import is additive; existing records were not deleted."}
+
+
+@app.get("/discipline/summary")
+def discipline_summary(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
+    rows = db.scalars(select(DisciplineEntry).where(DisciplineEntry.is_reversed.is_(False))).all()
+    totals: dict[int, int] = {}
+    for row in rows:
+        totals[row.student_id] = totals.get(row.student_id, 0) + row.points_deducted
+    earned: dict[int, float] = {}
+    reading_rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(Student.is_active.is_(True))).all()
+    for entry in reading_rows:
+        earned[entry.student_id] = earned.get(entry.student_id, 0.0) + reading_page_count(entry.pages) * 10 + reading_page_count(entry.recent_pages) + reading_page_count(entry.general_pages)
+    return [{"student_id": s.id, "name": s.name, "class_name": s.class_name, "academic_points": round(earned.get(s.id, 0), 1), "discipline_points_deducted": totals.get(s.id, 0), "final_points": round(earned.get(s.id, 0) - totals.get(s.id, 0), 1)} for s in students]
+
+@app.get("/discipline/{student_id}")
+def discipline_history(student_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
+    rows = db.scalars(select(DisciplineEntry).where(DisciplineEntry.student_id == student_id).order_by(DisciplineEntry.incident_date.desc(), DisciplineEntry.id.desc())).all()
+    return [{"id": r.id, "student_id": r.student_id, "reason": r.reason, "points_deducted": r.points_deducted, "incident_date": r.incident_date.isoformat(), "notes": r.notes, "created_by": r.created_by, "created_at": r.created_at.isoformat(), "is_reversed": r.is_reversed, "reversal_reason": r.reversal_reason, "reversed_at": r.reversed_at.isoformat() if r.reversed_at else None} for r in rows]
+
+@app.post("/discipline", status_code=201)
+def add_discipline_entry(data: DisciplineInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    student = db.scalar(select(Student).where(Student.id == data.student_id, Student.is_active.is_(True)))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Active student not found")
+    row = DisciplineEntry(student_id=student.id, reason=data.reason, points_deducted=data.points_deducted, incident_date=data.incident_date, notes=data.notes, created_by=user.id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "student_id": row.student_id, "reason": row.reason, "points_deducted": row.points_deducted, "incident_date": row.incident_date.isoformat(), "is_reversed": row.is_reversed}
+
+@app.post("/discipline/{entry_id}/reverse")
+def reverse_discipline_entry(entry_id: int, data: DisciplineReverseInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.get(DisciplineEntry, entry_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Discipline record not found")
+    if row.is_reversed:
+        raise HTTPException(status_code=409, detail="This record has already been corrected")
+    row.is_reversed = True
+    row.reversed_by = user.id
+    row.reversed_at = datetime.now(timezone.utc)
+    row.reversal_reason = data.reason
+    db.commit()
+    return {"id": row.id, "is_reversed": True, "reversal_reason": row.reversal_reason}
 
 @app.get("/points/leaderboard")
 def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
