@@ -689,7 +689,7 @@ def discipline_summary(user: User = Depends(require_teacher), db: Session = Depe
     return [{"student_id": s.id, "name": s.name, "class_name": s.class_name, "academic_points": round(earned.get(s.id, 0), 1), "discipline_points_deducted": totals.get(s.id, 0), "final_points": round(earned.get(s.id, 0) - totals.get(s.id, 0), 1)} for s in students]
 
 @app.get("/discipline/{student_id}")
-def discipline_history(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def discipline_history(student_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     rows = db.scalars(select(DisciplineEntry).where(DisciplineEntry.student_id == student_id).order_by(DisciplineEntry.incident_date.desc(), DisciplineEntry.id.desc())).all()
     return [{"id": r.id, "student_id": r.student_id, "reason": r.reason, "points_deducted": r.points_deducted, "incident_date": r.incident_date.isoformat(), "notes": r.notes, "created_by": r.created_by, "created_at": r.created_at.isoformat(), "is_reversed": r.is_reversed, "reversal_reason": r.reversal_reason, "reversed_at": r.reversed_at.isoformat() if r.reversed_at else None} for r in rows]
