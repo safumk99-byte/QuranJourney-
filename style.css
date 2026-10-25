@@ -85,3 +85,9 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 @media(min-width:561px) and (max-width:760px){
   .student-detail-page #entryForm .field-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 }
+
+.student-detail-page .range-label{display:block;margin-top:10px;color:#526b5e;font-size:12px;font-weight:700}
+.student-detail-page .range-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:7px}
+.student-detail-page .range-grid label{font-size:11px;gap:5px}
+.student-detail-page .range-grid select{font-size:12px;padding:9px 7px!important;min-height:42px}
+@media(max-width:560px){.student-detail-page .range-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.student-detail-page .range-grid select{font-size:12px;padding:9px 6px!important}}
