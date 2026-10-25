@@ -696,6 +696,10 @@ def discipline_history(student_id: int, user: User = Depends(require_teacher), d
 
 @app.post("/discipline", status_code=201)
 def add_discipline_entry(data: DisciplineInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    fixed_deductions = {"Disrespectful speech": 2, "Rude behavior to teacher": 5, "Repeated disobedience": 5, "Serious discipline violation": 10}
+    required_points = next((points for reason, points in fixed_deductions.items() if reason.casefold() == data.reason.strip().casefold()), None)
+    if required_points is not None and data.points_deducted != required_points:
+        raise HTTPException(status_code=422, detail=f"This reason requires a deduction of {required_points} points")
     student = db.scalar(select(Student).where(Student.id == data.student_id, Student.is_active.is_(True)))
     if student is None:
         raise HTTPException(status_code=404, detail="Active student not found")
