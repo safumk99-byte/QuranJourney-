@@ -673,7 +673,7 @@ def get_attendance(student_id: int, user: User = Depends(current_user), db: Sess
     rows = db.scalars(select(Attendance).where(Attendance.student_id == student_id).order_by(Attendance.attendance_date.desc(), Attendance.period)).all()
     return [{"id": r.id, "date": r.attendance_date.isoformat(), "status": r.status, "period": r.period, "remarks": r.remarks} for r in rows]
 
-@app.post("/students/{student_id}/attendance")
+@app.post("/students/{student_id}/attendance", status_code=201)
 def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     if data.status not in {"present", "late", "absent", "leave"}:
