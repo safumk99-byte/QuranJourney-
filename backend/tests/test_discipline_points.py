@@ -1,6 +1,11 @@
 from datetime import date
 
-from test_auth_and_access import auth, login
+def login(client, login_id, password):
+    return client.post('/auth/login', json={'login_id': login_id, 'password': password})
+
+
+def auth(token):
+    return {'Authorization': f'Bearer {token}'}
 
 
 def test_teacher_can_add_discipline_points_and_reverse_a_record(client):
