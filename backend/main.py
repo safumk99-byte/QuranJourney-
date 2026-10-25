@@ -441,7 +441,7 @@ def startup() -> None:
                 "score_mu": "INTEGER NOT NULL DEFAULT 0",
                 "legacy_id": "VARCHAR(120) NULL",
             },
-            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL"},
+            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL", "new_lesson": "TEXT NULL", "pages": "VARCHAR(200) NULL", "recent_revision": "TEXT NULL", "general_revision": "TEXT NULL", "remarks": "TEXT NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL", "period": "INTEGER NOT NULL DEFAULT 1"},
         }
         with engine.begin() as conn:
