@@ -121,7 +121,7 @@ class DisciplineEntry(Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     reason: Mapped[str] = mapped_column(String(200))
     points_deducted: Mapped[int] = mapped_column(Integer)
-    incident_date: Mapped[datetime] = mapped_column(Date, index=True)
+    incident_date: Mapped[date] = mapped_column(Date, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
