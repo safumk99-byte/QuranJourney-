@@ -223,14 +223,14 @@ class ReadingInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_range(self):
-        for value in (self.pages, self.recent_pages, self.general_pages):
+        for value, maximum in ((self.pages, 5), (self.recent_pages, 10), (self.general_pages, 10)):
             if value is not None:
                 try:
                     n = float(value)
                 except (TypeError, ValueError):
-                    raise ValueError("Page counts must be numbers from 0 to 5 in half-page increments")
-                if n < 0 or n > 5 or abs(n * 2 - round(n * 2)) > 1e-9:
-                    raise ValueError("Page counts must be numbers from 0 to 5 in half-page increments")
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
         values = (self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
         if any(value is not None for value in values):
             if any(value is None for value in values):
@@ -279,6 +279,18 @@ class ReadingUpdateInput(BaseModel):
     general_revision: str | None = None
     general_pages: str | None = Field(default=None, max_length=20)
     remarks: str | None = None
+
+    @model_validator(mode="after")
+    def validate_activity_pages(self):
+        for value, maximum in ((self.pages, 5), (self.recent_pages, 10), (self.general_pages, 10)):
+            if value is not None:
+                try:
+                    n = float(value)
+                except (TypeError, ValueError):
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                    raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
+        return self
 
 class AttendanceInput(BaseModel):
     attendance_date: datetime
