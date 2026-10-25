@@ -276,11 +276,13 @@ class ReadingInput(BaseModel):
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
                 if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
-        values = (self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
-        if any(value is not None for value in values):
-            if any(value is None for value in values):
-                raise ValueError("All four Surah/Ayah fields must be provided together")
-            validate_quran_range(self.start_surah, self.start_ayah, self.end_surah, self.end_ayah)
+        for prefix in ("", "recent_", "general_"):
+            keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
+            values = tuple(getattr(self, key) for key in keys)
+            if any(value is not None for value in values):
+                if any(value is None for value in values):
+                    raise ValueError(f"All four Surah/Ayah fields must be provided together for {prefix or 'new lesson'}")
+                validate_quran_range(*values)
         return self
 
     new_lesson: str | None = None
@@ -771,11 +773,18 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
     values = data.model_dump(exclude_unset=True)
     combined = {"start_surah": row.start_surah, "start_ayah": row.start_ayah, "end_surah": row.end_surah, "end_ayah": row.end_ayah}
     combined.update(values)
-    if all(combined.get(k) is not None for k in ("start_surah", "start_ayah", "end_surah", "end_ayah")):
-        try:
-            validate_quran_range(combined["start_surah"], combined["start_ayah"], combined["end_surah"], combined["end_ayah"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    for prefix in ("", "recent_", "general_"):
+        keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
+        range_values = {key: getattr(row, key) for key in keys}
+        range_values.update({key: values[key] for key in keys if key in values})
+        supplied = tuple(range_values[key] for key in keys)
+        if any(value is not None for value in supplied):
+            if any(value is None for value in supplied):
+                raise HTTPException(status_code=422, detail=f"All four Surah/Ayah fields must be provided together for {prefix or 'new lesson'}")
+            try:
+                validate_quran_range(*supplied)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
     for key, value in values.items():
         if key == "entry_date":
             if value is None:
