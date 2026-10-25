@@ -91,3 +91,8 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 .student-detail-page .range-grid label{font-size:11px;gap:5px}
 .student-detail-page .range-grid select{font-size:12px;padding:9px 7px!important;min-height:42px}
 @media(max-width:560px){.student-detail-page .range-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.student-detail-page .range-grid select{font-size:12px;padding:9px 6px!important}}
+
+.student-detail-page #entryForm .actions{display:flex;flex-wrap:wrap;gap:10px}
+.student-detail-page #entryForm .actions .btn{flex:1 1 150px}
+.student-detail-page #entryForm #saveAddBtn{background:#edf5ef;color:#175b43;border:1px solid #c9dfd0}
+@media(max-width:560px){.student-detail-page #entryForm .actions{display:grid;grid-template-columns:1fr}.student-detail-page #entryForm .actions .btn{width:100%}}
