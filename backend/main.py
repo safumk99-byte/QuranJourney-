@@ -626,10 +626,14 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
     check_student_access(student_id, user, db)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
-    try:
-        validate_quran_range(data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    surah_ayah_values = (data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
+    if any(value is not None for value in surah_ayah_values):
+        if any(value is None for value in surah_ayah_values):
+            raise HTTPException(status_code=422, detail="All four Surah/Ayah fields must be provided together")
+        try:
+            validate_quran_range(data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     db.add(row)
