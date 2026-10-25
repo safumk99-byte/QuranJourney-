@@ -72,6 +72,14 @@ class ReadingEntry(Base):
     start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
     end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
     end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recent_end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_start_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_start_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_end_surah: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    general_end_ayah: Mapped[int | None] = mapped_column(Integer, nullable=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     entry_date: Mapped[datetime] = mapped_column(Date, index=True)
     new_lesson: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -201,6 +209,14 @@ class ReadingInput(BaseModel):
     start_ayah: int | None = Field(default=None, ge=1, le=286)
     end_surah: int | None = Field(default=None, ge=1, le=114)
     end_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_start_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_end_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_end_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_start_surah: int | None = Field(default=None, ge=1, le=114)
+    general_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_end_surah: int | None = Field(default=None, ge=1, le=114)
+    general_end_ayah: int | None = Field(default=None, ge=1, le=286)
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -223,6 +239,14 @@ class ReadingUpdateInput(BaseModel):
     start_ayah: int | None = Field(default=None, ge=1, le=286)
     end_surah: int | None = Field(default=None, ge=1, le=114)
     end_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_start_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    recent_end_surah: int | None = Field(default=None, ge=1, le=114)
+    recent_end_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_start_surah: int | None = Field(default=None, ge=1, le=114)
+    general_start_ayah: int | None = Field(default=None, ge=1, le=286)
+    general_end_surah: int | None = Field(default=None, ge=1, le=114)
+    general_end_ayah: int | None = Field(default=None, ge=1, le=286)
     new_lesson: str | None = None
     pages: str | None = Field(default=None, max_length=200)
     recent_revision: str | None = None
@@ -342,7 +366,7 @@ def startup() -> None:
                 "score_mu": "INTEGER NOT NULL DEFAULT 0",
                 "legacy_id": "VARCHAR(120) NULL",
             },
-            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL"},
+            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL"},
         }
         with engine.begin() as conn:
@@ -581,7 +605,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id == student_id).order_by(ReadingEntry.entry_date.desc(), ReadingEntry.id.desc())).all()
-    return [{"id": r.id, "date": r.entry_date.isoformat(), "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "general_revision": r.general_revision, "remarks": r.remarks} for r in rows]
+    return [{"id": r.id, "date": r.entry_date.isoformat(), "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "recent_start_surah": r.recent_start_surah, "recent_start_ayah": r.recent_start_ayah, "recent_end_surah": r.recent_end_surah, "recent_end_ayah": r.recent_end_ayah, "general_start_surah": r.general_start_surah, "general_start_ayah": r.general_start_ayah, "general_end_surah": r.general_end_surah, "general_end_ayah": r.general_end_ayah, "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "general_revision": r.general_revision, "remarks": r.remarks} for r in rows]
 
 @app.patch("/students/{student_id}/reading/{entry_id}")
 def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -634,7 +658,7 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
             validate_quran_range(data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
+    row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, general_revision=data.general_revision, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     db.add(row)
     db.commit()
