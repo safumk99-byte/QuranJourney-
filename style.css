@@ -135,3 +135,34 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 
 /* Daily progress form refresh */
 .student-detail-page #entryForm{display:grid;gap:18px}.student-detail-page .progress-group{border:1px solid #d8e4f0;border-radius:18px;padding:20px;background:linear-gradient(145deg,#fff,#f6faff);box-shadow:0 8px 24px rgba(28,62,105,.07)}.student-detail-page .progress-group-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.student-detail-page .progress-group h3{font-size:1.12rem;margin:0;color:#183b63}.student-detail-page .range-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}.student-detail-page #entryForm label{display:flex;flex-direction:column;gap:7px;font-weight:600;color:#30445d}.student-detail-page #entryForm select,.student-detail-page #entryForm input,.student-detail-page #entryForm textarea{width:100%;min-height:44px;border:1px solid #cbd8e6;border-radius:10px;padding:9px 11px;background:#fff;color:#172b45}.student-detail-page .section-save{margin-top:14px;min-height:44px;border-radius:11px;font-weight:700;box-shadow:0 5px 12px rgba(28,62,105,.12)}.student-detail-page .progress-group small{display:block;margin-top:8px;color:#61748a}.student-detail-page .actions{display:flex;gap:10px;flex-wrap:wrap}@media(max-width:700px){.student-detail-page .progress-group{padding:15px}.student-detail-page .range-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-detail-page .progress-group-head{align-items:flex-start}}
+
+
+/* Quran Journey — refined Daily Progress entry cards */
+.student-detail-page #entryForm{gap:22px}
+.student-detail-page #entryForm>.field-row{padding:18px 20px;border:1px solid #dce6f1;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(28,55,90,.045)}
+.student-detail-page #entryForm .progress-group{position:relative;isolation:isolate;overflow:hidden;margin:0;padding:22px 22px 20px;border:1px solid #d8e4ef;border-radius:20px;background:linear-gradient(135deg,#fff 0%,#f8fbff 70%,#f0f6ff 100%);box-shadow:0 10px 28px rgba(30,64,105,.075);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.student-detail-page #entryForm .progress-group:before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:linear-gradient(180deg,#3677d4,#63b6cf);z-index:-1}
+.student-detail-page #entryForm .progress-group:nth-of-type(2):before{background:linear-gradient(180deg,#25856c,#7bc6a5)}
+.student-detail-page #entryForm .progress-group:nth-of-type(3):before{background:linear-gradient(180deg,#7356c8,#b3a0f2)}
+.student-detail-page #entryForm .progress-group:nth-of-type(4):before{background:linear-gradient(180deg,#d18b32,#f0c46c)}
+.student-detail-page #entryForm .progress-group:hover{transform:translateY(-1px);border-color:#c3d6ea;box-shadow:0 14px 32px rgba(30,64,105,.11)}
+.student-detail-page #entryForm .progress-group-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid #e5edf5}
+.student-detail-page #entryForm .progress-group-head h3{display:flex;align-items:center;gap:10px;margin:0;font-size:1.18rem;line-height:1.4;font-weight:800;letter-spacing:-.02em;color:#17385e}
+.student-detail-page #entryForm .progress-group-head h3:before{content:"";display:inline-block;width:10px;height:10px;border-radius:4px;background:#3677d4;box-shadow:0 0 0 5px #e5efff}
+.student-detail-page #entryForm .progress-group:nth-of-type(3) .progress-group-head h3:before{background:#25856c;box-shadow:0 0 0 5px #e3f5ed}
+.student-detail-page #entryForm .progress-group:nth-of-type(4) .progress-group-head h3:before{background:#7356c8;box-shadow:0 0 0 5px #eee9ff}
+.student-detail-page #entryForm .progress-group-head>label{min-width:145px;max-width:190px;font-size:.82rem;color:#52677f}
+.student-detail-page #entryForm .range-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 12px}
+.student-detail-page #entryForm .range-grid label{min-width:0;font-size:.82rem;line-height:1.35;color:#435a73}
+.student-detail-page #entryForm select,.student-detail-page #entryForm input,.student-detail-page #entryForm textarea{box-sizing:border-box;min-width:0;min-height:46px;border:1px solid #d3dfec;border-radius:11px;padding:10px 12px;background-color:#fff;color:#18334f;font-size:.94rem;box-shadow:0 1px 2px rgba(20,45,75,.025);transition:border-color .15s ease,box-shadow .15s ease}
+.student-detail-page #entryForm select:focus,.student-detail-page #entryForm input:focus,.student-detail-page #entryForm textarea:focus{outline:none;border-color:#4c8de0;box-shadow:0 0 0 4px rgba(76,141,224,.14)}
+.student-detail-page #entryForm .progress-group small{margin-top:10px;color:#708198;font-size:.78rem}
+.student-detail-page #entryForm .section-save{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto;min-width:190px;min-height:45px;margin-top:17px;padding:11px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,#1d5fae,#347fce);color:#fff;font-weight:750;letter-spacing:.01em;box-shadow:0 7px 16px rgba(36,105,180,.2);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,filter .15s ease}
+.student-detail-page #entryForm .section-save:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 10px 20px rgba(36,105,180,.25)}
+.student-detail-page #entryForm .section-save:active{transform:translateY(0)}
+.student-detail-page #entryForm .section-save:disabled{opacity:.6;cursor:wait;transform:none}
+.student-detail-page #entryForm .actions{padding-top:6px}
+.student-detail-page #entryForm #remarks{min-height:92px;resize:vertical}
+@media(max-width:850px){.student-detail-page #entryForm .range-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-detail-page #entryForm .progress-group{padding:18px}}
+@media(max-width:520px){.student-detail-page #entryForm .progress-group{padding:16px 14px 17px;border-radius:16px}.student-detail-page #entryForm .progress-group-head{align-items:stretch;flex-direction:column;gap:14px}.student-detail-page #entryForm .progress-group-head>label{max-width:none;width:100%}.student-detail-page #entryForm .range-grid{gap:11px;margin-top:15px}.student-detail-page #entryForm .range-grid label{font-size:.78rem}.student-detail-page #entryForm select,.student-detail-page #entryForm input{min-height:44px;padding:9px}.student-detail-page #entryForm .section-save{width:100%;min-width:0}}
+@media(prefers-reduced-motion:reduce){.student-detail-page #entryForm .progress-group,.student-detail-page #entryForm .section-save{transition:none}}
