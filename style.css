@@ -181,3 +181,15 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 .student-detail-page #entryForm .progress-group:nth-of-type(3) .section-save{background:linear-gradient(120deg,#16845d,#21a179)}
 .student-detail-page #entryForm .progress-group:nth-of-type(4) .section-save{background:linear-gradient(120deg,#6b48b8,#8a64d6)}
 .student-detail-page #entryForm select,.student-detail-page #entryForm input,.student-detail-page #entryForm textarea{border-color:#c2d5e8;background-color:rgba(255,255,255,.95)}
+
+/* Whole-app landscape orientation: optimize all pages in wide phone view */
+@media (orientation:landscape) and (max-height:560px){
+ html{font-size:14px} body{min-height:100vh} .container{width:min(100% - 24px,1200px);max-width:1200px;padding-left:12px;padding-right:12px}
+ .topbar{min-height:54px;height:auto;padding:8px 14px;gap:10px;flex-wrap:nowrap}.brand{font-size:18px}.tagline{font-size:11px}.top-pill{padding:7px 10px;font-size:12px}
+ .hero{padding:16px 18px;margin-bottom:14px;gap:14px}.hero h1{font-size:clamp(20px,3vw,30px)}.hero p{margin-top:5px}
+ .panel{padding:16px;margin-bottom:14px;border-radius:14px}.panel h2{font-size:19px;margin-bottom:10px}
+ .student-detail-page #entryForm{gap:12px}.student-detail-page #entryForm .field-row{padding:12px 14px}.student-detail-page #entryForm .progress-group{padding:14px 16px}.student-detail-page #entryForm .progress-group-head{padding-bottom:9px}.student-detail-page #entryForm .range-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}.student-detail-page #entryForm select,.student-detail-page #entryForm input,.student-detail-page #entryForm textarea{min-height:36px;padding:7px 9px;font-size:13px}.student-detail-page #entryForm .section-save{min-height:36px;margin-top:8px;padding:8px 14px}.student-detail-page #entryForm .actions{gap:8px}
+ .table-wrap,.table-responsive,.student-table-wrap{max-width:100%;overflow-x:auto}.student-grid,.cards-grid,.completion-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .attendance-container{max-width:1200px;padding:10px}.attendance-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}.attendance-filter{padding:12px;margin-bottom:12px}.attendance-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.attendance-stat{padding:10px}.attendance-stat strong{font-size:22px}.attendance-stat span{font-size:13px}.attendance-students{padding:14px}.attendance-boxes{gap:8px;margin:12px 0}.attendance-box{width:58px;min-height:58px}
+}
+@media (orientation:landscape) and (min-width:700px){.container{max-width:1200px}.attendance-container{max-width:1200px}}
