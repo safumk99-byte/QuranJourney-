@@ -496,9 +496,16 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
-    with engine.begin() as conn:
-        conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN IF NOT EXISTS "start_juz" INTEGER NULL'))
-        conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN IF NOT EXISTS "end_juz" INTEGER NULL'))
+    # Add Juz columns in a SQLite- and PostgreSQL-compatible way.
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "challenge_ranges" in inspector.get_table_names():
+        existing_columns = {column["name"] for column in inspector.get_columns("challenge_ranges")}
+        with engine.begin() as conn:
+            if "start_juz" not in existing_columns:
+                conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "start_juz" INTEGER NULL'))
+            if "end_juz" not in existing_columns:
+                conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "end_juz" INTEGER NULL'))
     # Additive, non-destructive migration for databases created by earlier scaffold versions.
     if engine.dialect.name == "postgresql":
         additive = {
