@@ -172,6 +172,10 @@ class ChallengeQuestion(Base):
     teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     session: Mapped[ChallengeSession] = relationship(back_populates="questions")
 
+class ChallengeAudioInput(BaseModel):
+    audio_base64: str = Field(min_length=1, max_length=7_000_000)
+    audio_type: str = Field(default="audio/webm", max_length=100)
+
 class ChallengeRangeInput(BaseModel):
     start_juz: int = Field(ge=1, le=30)
     end_juz: int = Field(ge=1, le=30)
@@ -1102,7 +1106,25 @@ def save_challenge_session(student_id: int, challenge_date: date, data: Challeng
     return _challenge_session_json(row)
 
 @app.put("/students/{student_id}/challenge/sessions/{challenge_date}/audio/{question_no}")
-def save_challenge_audio(student_id: int, challenge_date: date, question_no: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    # Uploads are intentionally not accepted through JSON; endpoint is reserved for a future object-store adapter.
-    raise HTTPException(status_code=501, detail="Audio upload endpoint is not enabled yet. Text and review data are stored centrally.")
+def save_challenge_audio(student_id: int, challenge_date: date, question_no: int, data: ChallengeAudioInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    if question_no < 1 or question_no > 5:
+        raise HTTPException(status_code=422, detail="Question number must be between 1 and 5.")
+    row = db.scalar(select(ChallengeSession).where(
+        ChallengeSession.student_id == student_id,
+        ChallengeSession.challenge_date == challenge_date,
+    ))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Daily challenge was not found. Generate it before recording an answer.")
+    question = db.scalar(select(ChallengeQuestion).where(
+        ChallengeQuestion.session_id == row.id,
+        ChallengeQuestion.question_no == question_no,
+    ))
+    if question is None:
+        raise HTTPException(status_code=404, detail="Challenge question was not found. Save the five questions before recording.")
+    question.audio_data = data.audio_base64
+    question.audio_type = data.audio_type
+    question.submitted = True
+    db.commit()
+    return {"saved": True, "question_no": question_no}
 
