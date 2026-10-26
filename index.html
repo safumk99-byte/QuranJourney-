@@ -35,5 +35,14 @@
 </section></div>
 <footer>Quran Journey <span>•</span> Learn consistently. Keep progressing.</footer>
 </main><div id="toast" role="status" aria-live="polite"></div><div class="minus-modal-backdrop" id="minusPointsModal" hidden><section class="minus-modal" role="dialog" aria-modal="true" aria-labelledby="minusModalTitle"><div class="minus-modal-head"><div><div class="eyebrow green">QUICK ACTION</div><h2 id="minusModalTitle">Deduct Discipline Points</h2></div><button type="button" class="mini-btn" id="closeMinusPoints" aria-label="Close">✕</button></div><p class="discipline-note">Choose a student and a reason. The fixed deduction will be subtracted from Progress points; Progress records remain unchanged.</p><form id="minusPointsForm"><label>Student<select id="minusStudent" required><option value="">Select a student</option></select></label><div class="minus-current-balance"><span>Progress points</span><strong id="minusAcademicPoints">—</strong><span>Current deductions</span><strong id="minusExistingDeduction">—</strong><span>Final points after deduction</span><strong id="minusFinalPoints">—</strong></div><label>Reason<select id="minusReason" required><option value="Disrespectful speech" data-points="2">Disrespectful speech (−2 points)</option><option value="Rude behavior to teacher" data-points="5">Rude behavior to teacher (−5 points)</option><option value="Repeated disobedience" data-points="5">Repeated disobedience (−5 points)</option><option value="Serious discipline violation" data-points="10">Serious discipline violation (−10 points)</option></select></label><div class="minus-deduction-preview">Deduction: <strong id="minusDeductionValue">−2 points</strong></div><label>Incident date<input id="minusIncidentDate" type="date" required></label><label>Notes (optional)<textarea id="minusNotes" maxlength="1000" rows="2" placeholder="Additional details (optional)"></textarea></label><div class="minus-modal-actions"><button type="button" class="btn secondary" id="cancelMinusPoints">Cancel</button><button type="submit" class="btn primary" id="saveMinusPoints">Confirm Deduction</button></div></form></section></div><script src="app.js"></script><script src="photo.js"></script>
-<script>if('serviceWorker' in navigator && location.protocol!=='file:'){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}</script>
+<script>
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  window.addEventListener('load',async()=>{
+    try{
+      const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      await registration.update();
+    }catch(error){console.warn('Quran Journey update check failed',error);}
+  });
+}
+</script>
 <script src="./nav.js"></script></body></html>
