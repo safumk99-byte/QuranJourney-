@@ -135,9 +135,11 @@ class ChallengeRange(Base):
     __tablename__ = "challenge_ranges"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
-    surah: Mapped[int] = mapped_column(Integer)
-    start_ayah: Mapped[int] = mapped_column(Integer)
-    end_ayah: Mapped[int] = mapped_column(Integer)
+    surah: Mapped[int] = mapped_column(Integer, default=1)
+    start_ayah: Mapped[int] = mapped_column(Integer, default=1)
+    end_ayah: Mapped[int] = mapped_column(Integer, default=1)
+    start_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="Learning")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -167,18 +169,15 @@ class ChallengeQuestion(Base):
     session: Mapped[ChallengeSession] = relationship(back_populates="questions")
 
 class ChallengeRangeInput(BaseModel):
-    surah: int = Field(ge=1, le=114)
-    start_ayah: int = Field(ge=1, le=286)
-    end_ayah: int = Field(ge=1, le=286)
+    start_juz: int = Field(ge=1, le=30)
+    end_juz: int = Field(ge=1, le=30)
     status: str = Field(default="Learning", pattern="^(Learning|Completed)$")
     note: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
-    def validate_ayahs(self):
-        try:
-            validate_quran_range(self.surah, self.start_ayah, self.surah, self.end_ayah)
-        except ValueError as exc:
-            raise ValueError(str(exc)) from exc
+    def validate_juz_range(self):
+        if self.end_juz < self.start_juz:
+            raise ValueError("End Juz must be greater than or equal to Start Juz")
         return self
 
 class ChallengeQuestionInput(BaseModel):
@@ -497,6 +496,9 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN IF NOT EXISTS "start_juz" INTEGER NULL'))
+        conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN IF NOT EXISTS "end_juz" INTEGER NULL'))
     # Additive, non-destructive migration for databases created by earlier scaffold versions.
     if engine.dialect.name == "postgresql":
         additive = {
@@ -972,12 +974,12 @@ def _challenge_session_json(row: ChallengeSession):
 def list_challenge_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
     rows = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id).order_by(ChallengeRange.id)).all()
-    return [{"id": r.id, "surah": r.surah, "start": r.start_ayah, "end": r.end_ayah, "status": r.status, "note": r.note or ""} for r in rows]
+    return [{"id": r.id, "start_juz": r.start_juz, "end_juz": r.end_juz, "status": r.status, "note": r.note or ""} for r in rows]
 
 @app.post("/students/{student_id}/challenge/ranges", status_code=201)
 def add_challenge_range(student_id: int, data: ChallengeRangeInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
-    row = ChallengeRange(student_id=student_id, surah=data.surah, start_ayah=data.start_ayah, end_ayah=data.end_ayah, status=data.status, note=data.note)
+    row = ChallengeRange(student_id=student_id, surah=1, start_ayah=1, end_ayah=1, start_juz=data.start_juz, end_juz=data.end_juz, status=data.status, note=data.note)
     db.add(row); db.commit(); db.refresh(row)
     return {"id": row.id, "surah": row.surah, "start": row.start_ayah, "end": row.end_ayah, "status": row.status, "note": row.note or ""}
 
@@ -986,9 +988,9 @@ def edit_challenge_range(student_id: int, range_id: int, data: ChallengeRangeInp
     _challenge_student(student_id, user, db)
     row = db.scalar(select(ChallengeRange).where(ChallengeRange.id == range_id, ChallengeRange.student_id == student_id))
     if row is None: raise HTTPException(status_code=404, detail="Learning range not found")
-    for k, v in {"surah":data.surah,"start_ayah":data.start_ayah,"end_ayah":data.end_ayah,"status":data.status,"note":data.note}.items(): setattr(row,k,v)
+    for k, v in {"start_juz":data.start_juz,"end_juz":data.end_juz,"status":data.status,"note":data.note}.items(): setattr(row,k,v)
     db.commit()
-    return {"id": row.id, "surah": row.surah, "start": row.start_ayah, "end": row.end_ayah, "status": row.status, "note": row.note or ""}
+    return {"id": row.id, "start_juz": row.start_juz, "end_juz": row.end_juz, "status": row.status, "note": row.note or ""}
 
 @app.delete("/students/{student_id}/challenge/ranges/{range_id}", status_code=204)
 def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
