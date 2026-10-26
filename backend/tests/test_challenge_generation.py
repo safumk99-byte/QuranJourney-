@@ -26,7 +26,7 @@ def test_generate_daily_challenge_from_saved_juz_range(client, monkeypatch):
     assert range_response.status_code == 201
 
     monkeypatch.setattr(main, "_juz_ayah_refs", lambda juz: [
-        {"surah": 2, "surah_name": "Al-Baqarah", "ayah": n}
+        {"surah": 2, "surah_name": "Al-Baqarah", "ayah": n, "text": f"Arabic ayah text {n}"}
         for n in range(1, 21)
     ])
 
@@ -39,7 +39,7 @@ def test_generate_daily_challenge_from_saved_juz_range(client, monkeypatch):
     assert payload["date"] == "2026-10-26"
     assert len(payload["q"]) == 5
     assert len({q["text"] for q in payload["q"]}) == 5
-    assert all("Surah Al-Baqarah, Ayah" in q["text"] for q in payload["q"])
+    assert all(q["text"].startswith("Arabic ayah text ") for q in payload["q"])
     assert all(q["expected"].startswith("Surah 2:") for q in payload["q"])
 
     # The generated session is persisted and reused by the normal sessions API.
