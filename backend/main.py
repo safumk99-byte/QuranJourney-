@@ -985,6 +985,29 @@ def _challenge_session_json(row: ChallengeSession):
         "submitted": q.submitted, "review": q.review_score, "note": q.teacher_note or "",
         "has_audio": bool(q.audio_data), "audio_type": q.audio_type, "audio_base64": q.audio_data} for q in row.questions]}
 
+@app.get("/challenge/leaderboard")
+def challenge_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Separate Quran challenge marks leaderboard; never adds these marks to progress points."""
+    rows = db.execute(
+        select(Student, ChallengeSession)
+        .join(ChallengeSession, ChallengeSession.student_id == Student.id)
+        .where(ChallengeSession.confirmed.is_(True), Student.is_active.is_(True))
+        .order_by(ChallengeSession.challenge_date.desc())
+    ).all()
+    totals = {}
+    for student, session in rows:
+        entry = totals.setdefault(student.id, {
+            "student_id": student.id, "name": student.name,
+            "class_name": student.class_name or "Unassigned class",
+            "total_marks": 0, "challenges_completed": 0,
+        })
+        entry["total_marks"] += int(session.score or 0)
+        entry["challenges_completed"] += 1
+    ranked = sorted(totals.values(), key=lambda item: (-item["total_marks"], item["name"].casefold()))
+    for rank, entry in enumerate(ranked, start=1):
+        entry["rank"] = rank
+    return ranked
+
 @app.get("/students/{student_id}/challenge/ranges")
 def list_challenge_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
