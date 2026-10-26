@@ -166,3 +166,18 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
 @media(max-width:850px){.student-detail-page #entryForm .range-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-detail-page #entryForm .progress-group{padding:18px}}
 @media(max-width:520px){.student-detail-page #entryForm .progress-group{padding:16px 14px 17px;border-radius:16px}.student-detail-page #entryForm .progress-group-head{align-items:stretch;flex-direction:column;gap:14px}.student-detail-page #entryForm .progress-group-head>label{max-width:none;width:100%}.student-detail-page #entryForm .range-grid{gap:11px;margin-top:15px}.student-detail-page #entryForm .range-grid label{font-size:.78rem}.student-detail-page #entryForm select,.student-detail-page #entryForm input{min-height:44px;padding:9px}.student-detail-page #entryForm .section-save{width:100%;min-width:0}}
 @media(prefers-reduced-motion:reduce){.student-detail-page #entryForm .progress-group,.student-detail-page #entryForm .section-save{transition:none}}
+
+
+/* Bright, colorful daily progress cards */
+.student-detail-page #entryForm .progress-group{border:1px solid #cfe0f2;background:linear-gradient(135deg,#ffffff 0%,#f1f8ff 58%,#eaf8f6 100%);box-shadow:0 12px 28px rgba(22,76,125,.12)}
+.student-detail-page #entryForm .progress-group:nth-of-type(2){background:linear-gradient(135deg,#fff 0%,#eef6ff 52%,#dff0ff 100%);border-color:#bad8f5}
+.student-detail-page #entryForm .progress-group:nth-of-type(3){background:linear-gradient(135deg,#fff 0%,#effcf6 52%,#def7ea 100%);border-color:#b9e8d2}
+.student-detail-page #entryForm .progress-group:nth-of-type(4){background:linear-gradient(135deg,#fff 0%,#f6f0ff 52%,#eee5ff 100%);border-color:#d9cafa}
+.student-detail-page #entryForm .progress-group-head{border-bottom-color:#c9dced}
+.student-detail-page #entryForm .progress-group:nth-of-type(2) .progress-group-head h3{color:#174f8d}
+.student-detail-page #entryForm .progress-group:nth-of-type(3) .progress-group-head h3{color:#176b50}
+.student-detail-page #entryForm .progress-group:nth-of-type(4) .progress-group-head h3{color:#6241a0}
+.student-detail-page #entryForm .section-save{background:linear-gradient(120deg,#155eaa,#087f8c);box-shadow:0 7px 16px rgba(21,94,170,.25)}
+.student-detail-page #entryForm .progress-group:nth-of-type(3) .section-save{background:linear-gradient(120deg,#16845d,#21a179)}
+.student-detail-page #entryForm .progress-group:nth-of-type(4) .section-save{background:linear-gradient(120deg,#6b48b8,#8a64d6)}
+.student-detail-page #entryForm select,.student-detail-page #entryForm input,.student-detail-page #entryForm textarea{border-color:#c2d5e8;background-color:rgba(255,255,255,.95)}
