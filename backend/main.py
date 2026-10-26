@@ -1017,7 +1017,7 @@ def save_challenge_session(student_id: int, challenge_date: date, data: Challeng
         raise HTTPException(status_code=409, detail="Confirmed challenge cannot be changed. Create a new challenge date.")
     row.confirmed = data.confirmed
     row.score = sum(q.review or 0 for q in data.questions) if data.confirmed else 0
-    for old in list(row.questions): db.delete(old)
+    row.questions.clear()
     db.flush()
     for idx, q in enumerate(data.questions, start=1):
         row.questions.append(ChallengeQuestion(question_no=idx, question_text=q.text.strip(), expected_answer=q.expected,
