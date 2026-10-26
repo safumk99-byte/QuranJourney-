@@ -1,4 +1,4 @@
-const CACHE_NAME='quran-journey-v32';
+const CACHE_NAME='quran-journey-v33';
 const FILES=['./','./index.html','./style.css','./app.js','./photo.js','./manifest.json','./icon.svg','./students.html','./students.js','./attendance.html','./discipline.html','./discipline.js','./attendance.js','./student.html','./student.js','./parent.html','./parent.js','./login.html','./nav.js','./config.js','./auth.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('quran-journey-')&&key!==CACHE_NAME).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
