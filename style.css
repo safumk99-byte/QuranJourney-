@@ -290,3 +290,12 @@ footer{color:#71857b}
  .top-pill{font-size:11px}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+
+/* Smooth Quran completion animation on student directory cards */
+.directory-progress{height:9px;border-radius:999px;background:#e5eee8;overflow:hidden;position:relative;isolation:isolate}
+.directory-progress span{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#08745b 0%,#22a879 58%,#79d6a7 100%);box-shadow:0 0 10px rgba(34,168,121,.2);transition:width .9s cubic-bezier(.22,.8,.25,1);position:relative}
+.directory-progress span:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 15%,rgba(255,255,255,.48) 48%,transparent 72%);transform:translateX(-100%);animation:qj-progress-shimmer 1.5s ease-out .2s 1}
+.progress-percent{font-variant-numeric:tabular-nums;transition:color .2s}
+@keyframes qj-progress-shimmer{to{transform:translateX(120%)}}
+@media(prefers-reduced-motion:reduce){.directory-progress span{transition:none}.directory-progress span:after{animation:none}}
