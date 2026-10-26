@@ -193,3 +193,100 @@ body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!
  .attendance-container{max-width:1200px;padding:10px}.attendance-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}.attendance-filter{padding:12px;margin-bottom:12px}.attendance-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.attendance-stat{padding:10px}.attendance-stat strong{font-size:22px}.attendance-stat span{font-size:13px}.attendance-students{padding:14px}.attendance-boxes{gap:8px;margin:12px 0}.attendance-box{width:58px;min-height:58px}
 }
 @media (orientation:landscape) and (min-width:700px){.container{max-width:1200px}.attendance-container{max-width:1200px}}
+
+
+/* Quran Journey — unified visual design refresh (all pages) */
+:root{
+ --green:#08745b;--deep:#064b3b;--mint:#e4f6ee;--gold:#e4b85d;
+ --ink:#17372e;--muted:#687d75;--line:#dce9e2;--paper:#f3f7f5;
+ --brand-blue:#245fc7;--soft-blue:#edf4ff;
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:radial-gradient(ellipse at 8% 0%,#e4f5ec 0,transparent 36%),var(--paper);color:var(--ink);line-height:1.55}
+::selection{background:#bcebd7;color:#064b3b}
+a{transition:color .18s,background .18s,transform .18s}
+.topbar{position:relative;z-index:5;gap:12px;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);box-shadow:0 5px 22px rgba(14,63,46,.055);border-bottom:1px solid #dcebe3}
+.brandmark{background:linear-gradient(145deg,#0a765a,#064532);box-shadow:0 6px 14px rgba(8,116,91,.2);border:1px solid #ffffff30}
+.brand{letter-spacing:-.025em}.tagline{line-height:1.4}
+.top-pill{background:#e7f6ee;border:1px solid #d3eddf;color:#086449;transition:all .18s}
+.top-pill:hover{background:#d4f0e1;transform:translateY(-1px)}
+.container{padding-top:30px;padding-bottom:30px}
+.hero{background:linear-gradient(120deg,#064532 0%,#08745b 58%,#149477 100%);border:1px solid #ffffff24;box-shadow:0 16px 38px rgba(6,75,59,.16)}
+.hero:after{content:"";position:absolute;width:300px;height:300px;right:8%;top:-190px;border:1px solid #ffffff18;border-radius:50%;box-shadow:0 0 0 24px #ffffff08,0 0 0 50px #ffffff05;pointer-events:none}
+.hero>*{position:relative;z-index:1}
+.hero h1{letter-spacing:-.035em}.hero-art{background:#ffffff08}
+.panel,.completion-section,.directory-card,.stat{border-color:#dce9e2;box-shadow:0 8px 25px rgba(16,64,46,.055);transition:box-shadow .18s,border-color .18s}
+.panel{border-radius:20px}
+.panel:hover,.completion-section:hover{border-color:#c9e3d5;box-shadow:0 12px 30px rgba(16,64,46,.075)}
+.stat{border-radius:17px;background:linear-gradient(150deg,#fff,#fbfefc)}
+.stat-icon,.icon-badge{background:linear-gradient(145deg,#e6f8ee,#d8f0e4);color:#08745b}
+.stat strong{letter-spacing:-.035em}
+.section-head h2,.completion-heading h2{letter-spacing:-.025em}
+.eyebrow.green{color:#08745b}
+input,select,textarea{border-color:#d4e4da;background:#fff;transition:border-color .16s,box-shadow .16s,background .16s}
+input:hover,select:hover,textarea:hover{border-color:#b6d5c4}
+input:focus,select:focus,textarea:focus{border-color:#15936e!important;box-shadow:0 0 0 4px rgba(21,147,110,.12)!important}
+input[type=checkbox],input[type=radio]{accent-color:#08745b}
+.btn{border-radius:12px;transition:transform .16s,box-shadow .16s,filter .16s}
+.btn:hover{filter:brightness(1.035);box-shadow:0 7px 16px rgba(15,60,44,.12)}
+.btn:active{transform:translateY(0) scale(.99)}
+.btn.primary{background:linear-gradient(125deg,#08745b,#0a8b68);box-shadow:0 6px 14px rgba(8,116,91,.16)}
+.btn.secondary{border:1px solid #dbe7df;background:#f2f7f3}
+.mini-btn{border-color:#d9e6de;transition:all .16s}
+.mini-btn:hover{border-color:#b8ddc8;background:#e7f6ee;color:#075c43}
+.count,.class-chip{background:#e5f6ec;border:1px solid #d1eddd;color:#087052}
+.student-card,.directory-card,.completion-card{border-color:#dce9e2;border-radius:16px}
+.student-card:hover,.directory-card:hover,.completion-card:hover{border-color:#bcdcc9;box-shadow:0 10px 24px rgba(13,72,49,.08)}
+.avatar,.directory-avatar,.completion-avatar{background:linear-gradient(145deg,#e4f7ec,#d8f0e3);color:#08745b}
+.progress-line,.directory-progress,.completion-progress{background:#e7eee9}
+.progress-fill,.directory-progress span,.completion-progress span{background:linear-gradient(90deg,#08745b,#36b98a)}
+.table-wrap,.points-table-wrap,.discipline-history-wrap{border-color:#dce9e2;border-radius:14px}
+table{font-variant-numeric:tabular-nums}
+.marks-table th,.points-table th,.student-detail-page .daily-history th{background:#eaf5ee;color:#174b38}
+.marks-table tbody tr:nth-child(even),.points-table tbody tr:nth-child(even),.student-detail-page .daily-history tbody tr:nth-child(even){background:#fbfefc}
+.marks-table tbody tr:hover,.points-table tbody tr:hover,.student-detail-page .daily-history tbody tr:hover{background:#f0faf4}
+#toast{background:linear-gradient(120deg,#064b3b,#08745b);box-shadow:0 12px 28px rgba(6,75,59,.25)}
+.completion-metrics div,.directory-details div{background:#f0f7f2;border:1px solid #e3eee6}
+.completion-link{background:#e3f5eb;color:#087052}
+.student-detail-page main.container>.panel{border-color:#dce9e2;box-shadow:0 10px 28px rgba(16,64,46,.06)}
+.student-detail-page #entryForm>.field-row{border-color:#dce9e2;background:linear-gradient(145deg,#fff,#fbfefc)}
+.student-detail-page #entryForm .progress-group{box-shadow:0 9px 24px rgba(23,63,49,.07)}
+.student-detail-page #entryForm .progress-group:nth-of-type(2){background:linear-gradient(140deg,#fff,#eef6ff);border-color:#cfe0f7}
+.student-detail-page #entryForm .progress-group:nth-of-type(3){background:linear-gradient(140deg,#fff,#eaf9f1);border-color:#c5ead6}
+.student-detail-page #entryForm .progress-group:nth-of-type(4){background:linear-gradient(140deg,#fff,#f5efff);border-color:#e0d3f5}
+.student-detail-page #entryForm .progress-group:nth-of-type(2) .section-save{background:linear-gradient(120deg,#245fc7,#3988df)}
+.student-detail-page #entryForm .progress-group:nth-of-type(3) .section-save{background:linear-gradient(120deg,#08745b,#22a477)}
+.student-detail-page #entryForm .progress-group:nth-of-type(4) .section-save{background:linear-gradient(120deg,#6743b5,#9171db)}
+.attendance-page{background:radial-gradient(ellipse at 10% 0%,#e8eaff 0,transparent 38%),#f4f5fb;color:#26364b}
+.attendance-main-btn{background:linear-gradient(125deg,#4935d5,#6b58f4);box-shadow:0 7px 18px rgba(79,53,245,.18);border-radius:14px}
+.attendance-filter,.attendance-students{border:1px solid #e0e5f1;border-radius:18px;box-shadow:0 8px 24px rgba(41,49,90,.055)}
+.attendance-box{transition:transform .15s,box-shadow .15s;border-radius:15px}
+.attendance-box:hover{transform:translateY(-2px);box-shadow:0 8px 16px #0002}
+.attendance-box.present,.attendance-stat.present{background:linear-gradient(135deg,#0eaf69,#28cf86)}
+.attendance-box.late,.attendance-stat.late{background:linear-gradient(135deg,#8247d9,#a45df2)}
+.attendance-box.leave,.attendance-stat.leave{background:linear-gradient(135deg,#f3b923,#ffda59)}
+.attendance-box.absent,.attendance-stat.absent{background:linear-gradient(135deg,#e83f53,#ff6875)}
+.discipline-page .panel{border-radius:19px}
+.discipline-balance{border-radius:14px;background:linear-gradient(145deg,#fff,#f5faf6)}
+.discipline-balance.deduct{background:linear-gradient(145deg,#fff,#fff3f0)}
+.discipline-balance.net{background:linear-gradient(145deg,#fff,#eaf8ef)}
+.minus-modal{border:1px solid #dce9e2;border-radius:22px;box-shadow:0 24px 80px rgba(5,40,29,.28)}
+footer{color:#71857b}
+:focus-visible{outline:3px solid rgba(8,116,91,.28);outline-offset:2px}
+@media(max-width:800px){
+ .topbar{height:auto;min-height:70px;flex-wrap:wrap;padding:12px 16px}
+ .topbar .brandmark{width:40px;height:40px}
+ .top-pill{margin-left:0}
+}
+@media(max-width:560px){
+ .container{padding:16px 12px 24px}
+ .hero{border-radius:18px;padding:22px 17px}
+ .hero:after{right:-130px}
+ .panel{border-radius:17px}
+ .stat{border-radius:14px}
+ .btn{min-height:42px}
+ .topbar{gap:8px}
+ .topbar>div:nth-child(2){min-width:0;flex:1}
+ .top-pill{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
