@@ -1014,7 +1014,7 @@ def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(
 _JUZ_AYAH_CACHE: dict[int, list[dict]] = {}
 
 def _juz_ayah_refs(juz_no: int) -> list[dict]:
-    """Fetch verified ayah references for a Juz from the free AlQuran Cloud API."""
+    """Fetch verified Arabic ayah text and references for a Juz from AlQuran Cloud."""
     if juz_no not in _JUZ_AYAH_CACHE:
         try:
             with urlopen(f"https://api.alquran.cloud/v1/juz/{juz_no}/quran-uthmani", timeout=8) as response:
@@ -1023,9 +1023,9 @@ def _juz_ayah_refs(juz_no: int) -> list[dict]:
                 raise ValueError("Unexpected Quran API response")
             _JUZ_AYAH_CACHE[juz_no] = [
                 {"surah": int(a["surah"]["number"]), "surah_name": str(a["surah"]["englishName"]),
-                 "ayah": int(a["numberInSurah"])}
+                 "ayah": int(a["numberInSurah"]), "text": str(a["text"]).strip()}
                 for a in payload["data"]["ayahs"]
-                if a.get("surah", {}).get("number") and a.get("numberInSurah")
+                if a.get("surah", {}).get("number") and a.get("numberInSurah") and a.get("text")
             ]
         except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=502, detail=f"Could not load verified Quran data for Juz {juz_no}. Please retry.") from exc
@@ -1064,9 +1064,12 @@ def generate_daily_challenge(student_id: int, challenge_date: date, user: User =
         db.add(row)
         db.flush()
     for idx, ref in enumerate(chosen, start=1):
-        prompt = f"Recite from Surah {ref['surah_name']}, Ayah {ref['ayah']} onward."
-        expected = f"Surah {ref['surah']}:{ref['ayah']} (Juz {next((j for j in juz_numbers if any((a['surah'], a['ayah']) == (ref['surah'], ref['ayah']) for a in _JUZ_AYAH_CACHE.get(j, []))), juz_numbers[0])})"
-        row.questions.append(ChallengeQuestion(question_no=idx, question_text=prompt, expected_answer=expected))
+        # Show the actual Quran ayah in Arabic, not an instruction phrased as a question.
+        ayah_text = ref.get("text", "").strip()
+        if not ayah_text:
+            raise HTTPException(status_code=502, detail=f"Verified Arabic text is missing for Surah {ref['surah']} Ayah {ref['ayah']}.")
+        expected = f"Surah {ref['surah_name']} {ref['surah']}:{ref['ayah']} (Juz {next((j for j in juz_numbers if any((a['surah'], a['ayah']) == (ref['surah'], ref['ayah']) for a in _JUZ_AYAH_CACHE.get(j, []))), juz_numbers[0])})"
+        row.questions.append(ChallengeQuestion(question_no=idx, question_text=ayah_text, expected_answer=expected))
     db.commit()
     db.refresh(row)
     return _challenge_session_json(row)
