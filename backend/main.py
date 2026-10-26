@@ -130,6 +130,77 @@ class DisciplineEntry(Base):
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reversal_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+
+class ChallengeRange(Base):
+    __tablename__ = "challenge_ranges"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    surah: Mapped[int] = mapped_column(Integer)
+    start_ayah: Mapped[int] = mapped_column(Integer)
+    end_ayah: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="Learning")
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class ChallengeSession(Base):
+    __tablename__ = "challenge_sessions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    challenge_date: Mapped[date] = mapped_column(Date, index=True)
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    questions: Mapped[list["ChallengeQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="ChallengeQuestion.question_no")
+
+class ChallengeQuestion(Base):
+    __tablename__ = "challenge_questions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("challenge_sessions.id", ondelete="CASCADE"), index=True)
+    question_no: Mapped[int] = mapped_column(Integer)
+    question_text: Mapped[str] = mapped_column(Text, default="")
+    expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted: Mapped[bool] = mapped_column(Boolean, default=False)
+    audio_data: Mapped[bytes | None] = mapped_column(Text, nullable=True)
+    audio_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    review_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session: Mapped[ChallengeSession] = relationship(back_populates="questions")
+
+class ChallengeRangeInput(BaseModel):
+    surah: int = Field(ge=1, le=114)
+    start_ayah: int = Field(ge=1, le=286)
+    end_ayah: int = Field(ge=1, le=286)
+    status: str = Field(default="Learning", pattern="^(Learning|Completed)$")
+    note: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_ayahs(self):
+        try:
+            validate_quran_range(self.surah, self.start_ayah, self.surah, self.end_ayah)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+class ChallengeQuestionInput(BaseModel):
+    text: str = Field(default="", max_length=3000)
+    expected: str | None = Field(default=None, max_length=1000)
+    submitted: bool = False
+    review: int | None = Field(default=None)
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("review")
+    @classmethod
+    def valid_review(cls, value):
+        if value not in (None, 0, 10, 20):
+            raise ValueError("Review score must be 0, 10 or 20")
+        return value
+
+class ChallengeSessionInput(BaseModel):
+    date: date
+    questions: list[ChallengeQuestionInput] = Field(min_length=5, max_length=5)
+    confirmed: bool = False
+    score: int = Field(default=0, ge=0, le=100)
+
 class DisciplineInput(BaseModel):
     student_id: int = Field(gt=0)
     reason: str = Field(min_length=2, max_length=200)
@@ -879,3 +950,81 @@ def delete_mark(student_id: int, mark_id: int, user: User = Depends(require_teac
     db.delete(row)
     db.commit()
     return Response(status_code=204)
+
+
+# Challenge Zone: durable, authenticated storage shared across devices.
+def _challenge_student(student_id: int, user: User, db: Session) -> Student:
+    check_student_access(student_id, user, db)
+    student = db.get(Student, student_id)
+    if student is None or not student.is_active:
+        raise HTTPException(status_code=404, detail="Active student not found")
+    return student
+
+def _challenge_session_json(row: ChallengeSession):
+    return {"id": row.id, "date": row.challenge_date.isoformat(), "confirmed": row.confirmed,
+        "score": row.score, "q": [{"text": q.question_text, "expected": q.expected_answer or "",
+        "submitted": q.submitted, "review": q.review_score, "note": q.teacher_note or "",
+        "has_audio": bool(q.audio_data), "audio_type": q.audio_type} for q in row.questions]}
+
+@app.get("/students/{student_id}/challenge/ranges")
+def list_challenge_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    rows = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id).order_by(ChallengeRange.id)).all()
+    return [{"id": r.id, "surah": r.surah, "start": r.start_ayah, "end": r.end_ayah, "status": r.status, "note": r.note or ""} for r in rows]
+
+@app.post("/students/{student_id}/challenge/ranges", status_code=201)
+def add_challenge_range(student_id: int, data: ChallengeRangeInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    row = ChallengeRange(student_id=student_id, surah=data.surah, start_ayah=data.start_ayah, end_ayah=data.end_ayah, status=data.status, note=data.note)
+    db.add(row); db.commit(); db.refresh(row)
+    return {"id": row.id, "surah": row.surah, "start": row.start_ayah, "end": row.end_ayah, "status": row.status, "note": row.note or ""}
+
+@app.patch("/students/{student_id}/challenge/ranges/{range_id}")
+def edit_challenge_range(student_id: int, range_id: int, data: ChallengeRangeInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    row = db.scalar(select(ChallengeRange).where(ChallengeRange.id == range_id, ChallengeRange.student_id == student_id))
+    if row is None: raise HTTPException(status_code=404, detail="Learning range not found")
+    for k, v in {"surah":data.surah,"start_ayah":data.start_ayah,"end_ayah":data.end_ayah,"status":data.status,"note":data.note}.items(): setattr(row,k,v)
+    db.commit()
+    return {"id": row.id, "surah": row.surah, "start": row.start_ayah, "end": row.end_ayah, "status": row.status, "note": row.note or ""}
+
+@app.delete("/students/{student_id}/challenge/ranges/{range_id}", status_code=204)
+def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    row = db.scalar(select(ChallengeRange).where(ChallengeRange.id == range_id, ChallengeRange.student_id == student_id))
+    if row is None: raise HTTPException(status_code=404, detail="Learning range not found")
+    db.delete(row); db.commit()
+    return Response(status_code=204)
+
+@app.get("/students/{student_id}/challenge/sessions")
+def list_challenge_sessions(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    rows = db.scalars(select(ChallengeSession).where(ChallengeSession.student_id == student_id).order_by(ChallengeSession.challenge_date.desc())).all()
+    return [_challenge_session_json(row) for row in rows]
+
+@app.put("/students/{student_id}/challenge/sessions/{challenge_date}")
+def save_challenge_session(student_id: int, challenge_date: date, data: ChallengeSessionInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    if data.date != challenge_date: raise HTTPException(status_code=422, detail="Session date does not match URL")
+    row = db.scalar(select(ChallengeSession).where(ChallengeSession.student_id == student_id, ChallengeSession.challenge_date == challenge_date))
+    if row is None:
+        row = ChallengeSession(student_id=student_id, challenge_date=challenge_date)
+        db.add(row); db.flush()
+    if row.confirmed and data.confirmed is False:
+        # A confirmed score is immutable through ordinary save; teacher must re-review explicitly.
+        raise HTTPException(status_code=409, detail="Confirmed challenge cannot be changed. Create a new challenge date.")
+    row.confirmed = data.confirmed
+    row.score = sum(q.review or 0 for q in data.questions) if data.confirmed else 0
+    for old in list(row.questions): db.delete(old)
+    db.flush()
+    for idx, q in enumerate(data.questions, start=1):
+        row.questions.append(ChallengeQuestion(question_no=idx, question_text=q.text.strip(), expected_answer=q.expected,
+            submitted=q.submitted, review_score=q.review, teacher_note=q.note))
+    db.commit(); db.refresh(row)
+    return _challenge_session_json(row)
+
+@app.put("/students/{student_id}/challenge/sessions/{challenge_date}/audio/{question_no}")
+def save_challenge_audio(student_id: int, challenge_date: date, question_no: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    # Uploads are intentionally not accepted through JSON; endpoint is reserved for a future object-store adapter.
+    raise HTTPException(status_code=501, detail="Audio upload endpoint is not enabled yet. Text and review data are stored centrally.")
+
