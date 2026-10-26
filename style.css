@@ -404,3 +404,14 @@ img{max-width:100%}
  .top-pill{padding:8px 10px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* Monthly all-student progress PDF controls */
+.monthly-progress-report{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:18px 20px;margin:0 0 18px;border:1px solid #cfe7d8;border-radius:18px;background:linear-gradient(120deg,#f0faf4,#fff 70%);box-shadow:0 8px 22px rgba(13,72,49,.055)}
+.monthly-progress-report>div{flex:1;min-width:220px}
+.monthly-progress-report strong{font-size:16px;color:#075b45}
+.monthly-progress-report p{font-size:12px;color:#6c8175;margin:5px 0 0;line-height:1.5}
+.monthly-progress-report label{min-width:160px;margin:0}
+.monthly-progress-report input{margin-top:5px}
+.monthly-progress-report button{min-height:44px;white-space:nowrap}
+@media(max-width:560px){.monthly-progress-report{padding:15px;gap:10px}.monthly-progress-report>div,.monthly-progress-report label,.monthly-progress-report button{width:100%;min-width:0}.monthly-progress-report button{justify-content:center}}
