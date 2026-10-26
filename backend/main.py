@@ -160,7 +160,7 @@ class ChallengeQuestion(Base):
     question_text: Mapped[str] = mapped_column(Text, default="")
     expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted: Mapped[bool] = mapped_column(Boolean, default=False)
-    audio_data: Mapped[bytes | None] = mapped_column(Text, nullable=True)
+    audio_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     audio_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     review_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -187,6 +187,8 @@ class ChallengeQuestionInput(BaseModel):
     submitted: bool = False
     review: int | None = Field(default=None)
     note: str | None = Field(default=None, max_length=1000)
+    audio_base64: str | None = Field(default=None, max_length=7_000_000)
+    audio_type: str | None = Field(default=None, max_length=100)
 
     @field_validator("review")
     @classmethod
@@ -964,7 +966,7 @@ def _challenge_session_json(row: ChallengeSession):
     return {"id": row.id, "date": row.challenge_date.isoformat(), "confirmed": row.confirmed,
         "score": row.score, "q": [{"text": q.question_text, "expected": q.expected_answer or "",
         "submitted": q.submitted, "review": q.review_score, "note": q.teacher_note or "",
-        "has_audio": bool(q.audio_data), "audio_type": q.audio_type} for q in row.questions]}
+        "has_audio": bool(q.audio_data), "audio_type": q.audio_type, "audio_base64": q.audio_data} for q in row.questions]}
 
 @app.get("/students/{student_id}/challenge/ranges")
 def list_challenge_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -1019,7 +1021,7 @@ def save_challenge_session(student_id: int, challenge_date: date, data: Challeng
     db.flush()
     for idx, q in enumerate(data.questions, start=1):
         row.questions.append(ChallengeQuestion(question_no=idx, question_text=q.text.strip(), expected_answer=q.expected,
-            submitted=q.submitted, review_score=q.review, teacher_note=q.note))
+            submitted=q.submitted, review_score=q.review, teacher_note=q.note, audio_data=q.audio_base64, audio_type=q.audio_type))
     db.commit(); db.refresh(row)
     return _challenge_session_json(row)
 
