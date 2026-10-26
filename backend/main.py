@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import os
+import json
+import random
+from urllib.error import URLError, HTTPError
+from urllib.request import urlopen
 from datetime import date, datetime, timedelta, timezone
 from typing import Generator
 
@@ -1006,6 +1010,66 @@ def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(
     if row is None: raise HTTPException(status_code=404, detail="Learning range not found")
     db.delete(row); db.commit()
     return Response(status_code=204)
+
+_JUZ_AYAH_CACHE: dict[int, list[dict]] = {}
+
+def _juz_ayah_refs(juz_no: int) -> list[dict]:
+    """Fetch verified ayah references for a Juz from the free AlQuran Cloud API."""
+    if juz_no not in _JUZ_AYAH_CACHE:
+        try:
+            with urlopen(f"https://api.alquran.cloud/v1/juz/{juz_no}/quran-uthmani", timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if payload.get("code") != 200 or not isinstance(payload.get("data", {}).get("ayahs"), list):
+                raise ValueError("Unexpected Quran API response")
+            _JUZ_AYAH_CACHE[juz_no] = [
+                {"surah": int(a["surah"]["number"]), "surah_name": str(a["surah"]["englishName"]),
+                 "ayah": int(a["numberInSurah"])}
+                for a in payload["data"]["ayahs"]
+                if a.get("surah", {}).get("number") and a.get("numberInSurah")
+            ]
+        except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=502, detail=f"Could not load verified Quran data for Juz {juz_no}. Please retry.") from exc
+    return _JUZ_AYAH_CACHE[juz_no]
+
+@app.post("/students/{student_id}/challenge/generate/{challenge_date}")
+def generate_daily_challenge(student_id: int, challenge_date: date, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Generate and persist five recitation prompts restricted to the student's saved Juz ranges."""
+    _challenge_student(student_id, user, db)
+    existing = db.scalar(select(ChallengeSession).where(
+        ChallengeSession.student_id == student_id,
+        ChallengeSession.challenge_date == challenge_date,
+    ))
+    if existing and existing.confirmed:
+        raise HTTPException(status_code=409, detail="Today's challenge score is confirmed and cannot be regenerated.")
+    ranges = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id)).all()
+    juz_numbers = sorted({j for r in ranges if r.start_juz and r.end_juz for j in range(r.start_juz, r.end_juz + 1)})
+    if not juz_numbers:
+        raise HTTPException(status_code=400, detail="Save a Student Learning Range first.")
+    refs_by_key = {}
+    for juz_no in juz_numbers:
+        for ref in _juz_ayah_refs(juz_no):
+            refs_by_key[(ref["surah"], ref["ayah"])] = ref
+    refs = list(refs_by_key.values())
+    if len(refs) < 5:
+        raise HTTPException(status_code=400, detail="The saved learning range does not contain enough ayah references.")
+    chosen = random.SystemRandom().sample(refs, 5)
+    if existing:
+        existing.questions.clear()
+        db.flush()
+        row = existing
+        row.confirmed = False
+        row.score = 0
+    else:
+        row = ChallengeSession(student_id=student_id, challenge_date=challenge_date, confirmed=False, score=0)
+        db.add(row)
+        db.flush()
+    for idx, ref in enumerate(chosen, start=1):
+        prompt = f"Recite from Surah {ref['surah_name']}, Ayah {ref['ayah']} onward."
+        expected = f"Surah {ref['surah']}:{ref['ayah']} (Juz {next((j for j in juz_numbers if any((a['surah'], a['ayah']) == (ref['surah'], ref['ayah']) for a in _JUZ_AYAH_CACHE.get(j, []))), juz_numbers[0])})"
+        row.questions.append(ChallengeQuestion(question_no=idx, question_text=prompt, expected_answer=expected))
+    db.commit()
+    db.refresh(row)
+    return _challenge_session_json(row)
 
 @app.get("/students/{student_id}/challenge/sessions")
 def list_challenge_sessions(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
