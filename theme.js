@@ -1,0 +1,9 @@
+(()=>{'use strict';
+const KEY='qj-theme';
+const root=document.documentElement;
+function savedTheme(){try{return localStorage.getItem(KEY)}catch(_){return null}}
+function apply(theme){const dark=theme==='dark';root.dataset.theme=dark?'dark':'light';root.style.colorScheme=dark?'dark':'light';const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=dark?'#101c19':'#0b5b46';const btn=document.getElementById('qjThemeToggle');if(btn){btn.setAttribute('aria-pressed',String(dark));btn.setAttribute('aria-label',dark?'Switch to light mode':'Switch to dark mode');btn.title=dark?'Switch to light mode':'Switch to dark mode';btn.innerHTML=dark?'<span aria-hidden="true">☀</span><span class="qj-theme-label">Light</span>':'<span aria-hidden="true">☾</span><span class="qj-theme-label">Dark</span>'}}
+function init(){const saved=savedTheme();apply(saved==='dark'?'dark':'light');const header=document.querySelector('.topbar');if(header&&!document.getElementById('qjThemeToggle')){const btn=document.createElement('button');btn.type='button';btn.id='qjThemeToggle';btn.className='qj-theme-toggle';btn.addEventListener('click',()=>{const next=root.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem(KEY,next)}catch(_){}apply(next)});const nav=header.querySelector('.qj-nav');if(nav){const logout=nav.querySelector('#qjLogout');if(logout)nav.insertBefore(btn,logout);else nav.append(btn)}else header.append(btn);apply(root.dataset.theme)}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+window.QuranJourneyTheme={set:theme=>{try{localStorage.setItem(KEY,theme==='dark'?'dark':'light')}catch(_){}apply(theme==='dark'?'dark':'light')},get:()=>root.dataset.theme||'light'};
+})();
