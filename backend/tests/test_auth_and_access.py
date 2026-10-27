@@ -588,8 +588,10 @@ def test_reading_entry_progress_never_exceeds_total_pages(client):
         "total_pages": 5, "completed_pages": 4
     }).json()
     student_id = student["id"]
+    # Lesson page inputs are intentionally capped at 5 pages; adding 5 to
+    # a student already at 4/5 must still cap journey progress at total_pages.
     response = client.post(f"/students/{student_id}/reading", headers=headers, json={
-        "entry_date": "2026-10-24T00:00:00", "pages": "20"
+        "entry_date": "2026-10-24T00:00:00", "new_lesson_pages": "5", "pages": "5"
     })
     assert response.status_code == 201, response.text
     visible = next(s for s in client.get("/students", headers=headers).json() if s["id"] == student_id)
