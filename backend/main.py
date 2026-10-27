@@ -8,6 +8,7 @@ from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
 from datetime import date, datetime, timedelta, timezone
 from typing import Generator
+from zoneinfo import ZoneInfo
 
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, Response, status
@@ -442,7 +443,7 @@ def current_month_bounds(reference: date | None = None) -> tuple[date, date]:
     Point records remain in storage; aggregate point boards use this range so totals
     automatically start fresh on the first day of each month without deleting history.
     """
-    today = reference or date.today()
+    today = reference or datetime.now(ZoneInfo("Asia/Kolkata")).date()
     first = today.replace(day=1)
     if first.month == 12:
         next_month = first.replace(year=first.year + 1, month=1)
