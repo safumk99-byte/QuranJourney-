@@ -540,3 +540,32 @@ img{max-width:100%}
 .qj-theme-floating{position:fixed;right:14px;bottom:18px;box-shadow:0 4px 18px var(--shadow)}
 :root[data-theme="dark"] .qj-theme-toggle{background:#25372f;color:#e5f5ed;border-color:#465c50}
 @media(max-width:560px){.qj-theme-toggle{min-height:35px;padding:7px 10px;font-size:12px}.qj-theme-label{display:inline}.qj-theme-floating{right:12px;bottom:14px}}
+
+/* Dark-mode coverage for page-specific cards, forms, and status blocks */
+:root[data-theme="dark"] .directory-card,:root[data-theme="dark"] .completion-section,:root[data-theme="dark"] .discipline-balance,:root[data-theme="dark"] .minus-modal,:root[data-theme="dark"] .minus-current-balance,:root[data-theme="dark"] .student-detail-page #entryForm .progress-group,:root[data-theme="dark"] .student-detail-page #entryForm>.field-row,:root[data-theme="dark"] .challenge-question,:root[data-theme="dark"] .challenge-answer,:root[data-theme="dark"] .attendance-filter,:root[data-theme="dark"] .attendance-report,:root[data-theme="dark"] .attendance-summary,:root[data-theme="dark"] .attendance-table-wrap{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .directory-details div,:root[data-theme="dark"] .completion-metrics div,:root[data-theme="dark"] .discipline-card-points>div,:root[data-theme="dark"] .student-detail-page #dailyPoints,:root[data-theme="dark"] .student-detail-page #entryForm #dailyPoints,:root[data-theme="dark"] .minus-deduction-preview{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .student-detail-page #entryForm input:focus,:root[data-theme="dark"] .student-detail-page #entryForm select:focus,:root[data-theme="dark"] .student-detail-page #entryForm textarea:focus{background:var(--field);color:var(--ink);border-color:#4fd0a2}
+:root[data-theme="dark"] .student-detail-page .daily-history,:root[data-theme="dark"] .points-table,:root[data-theme="dark"] .marks-table{background:var(--surface)}
+:root[data-theme="dark"] .student-detail-page .daily-history tbody tr:nth-child(even),:root[data-theme="dark"] .points-table tbody tr:nth-child(even),:root[data-theme="dark"] .marks-table tbody tr:nth-child(even){background:#1d2a24}
+:root[data-theme="dark"] .student-detail-page .daily-history tbody tr:hover,:root[data-theme="dark"] .points-table tbody tr:hover,:root[data-theme="dark"] .marks-table tbody tr:hover{background:#293b31}
+:root[data-theme="dark"] .directory-avatar,:root[data-theme="dark"] .avatar,:root[data-theme="dark"] .stat-icon{background:#29483a;color:#a4ead0}
+:root[data-theme="dark"] .class-chip,:root[data-theme="dark"] .count,:root[data-theme="dark"] .completion-link,:root[data-theme="dark"] .discipline-status,:root[data-theme="dark"] .discipline-message{background:#29483a;color:#b5f1d7;border-color:#3b6250}
+:root[data-theme="dark"] .completion-status.needs-data{background:#4a3b20;color:#ffe3a0}
+:root[data-theme="dark"] .completion-status.has-estimate{background:#29483a;color:#b5f1d7}
+:root[data-theme="dark"] .discipline-status.reversed{background:#482c29;color:#ffc4bd}
+:root[data-theme="dark"] .manual-check-note,:root[data-theme="dark"] .challenge-storage-note{background:#3a3323;color:#f2dfad;border-color:#665535}
+:root[data-theme="dark"] .challenge-notice,:root[data-theme="dark"] .attendance-notice{background:#21382e;color:#d8eee3;border-color:#3b5a49}
+:root[data-theme="dark"] .rank-badge.rank-1{background:#5b4a22;color:#ffe4a0}
+:root[data-theme="dark"] .rank-badge.rank-2{background:#35404a;color:#e0e8f0}
+:root[data-theme="dark"] .rank-badge.rank-3{background:#50382a;color:#ffd2b2}
+:root[data-theme="dark"] .directory-actions [data-edit]{background:#223858;color:#c7ddff;border-color:#354f77}
+:root[data-theme="dark"] .directory-actions [data-delete],:root[data-theme="dark"] .dashboard-minus-action{background:#482c29;color:#ffc4bd;border-color:#75443f}
+:root[data-theme="dark"] .discipline-hero-action,:root[data-theme="dark"] .discipline-card-btn{background:#4a3b20;color:#ffe3a0;border-color:#665535}
+:root[data-theme="dark"] .attendance-stat.leave,:root[data-theme="dark"] .attendance-box.leave{background:#d5ad20;color:#1a1a1a}
+:root[data-theme="dark"] .attendance-stat.absent,:root[data-theme="dark"] .attendance-box.absent{background:#c92836;color:#fff}
+:root[data-theme="dark"] .qj-nav{background:var(--surface);border-color:var(--line)}
+:root[data-theme="dark"] .qj-logout{background:#25372f;color:#d9eee4;border-color:#465c50}
+:root[data-theme="dark"] .qj-logout:hover{background:#482c29;color:#ffc4bd}
+:root[data-theme="dark"] .empty-state,:root[data-theme="dark"] .no-results,:root[data-theme="dark"] .empty{background:var(--surface-2);border-color:var(--line);color:var(--muted)}
+:root[data-theme="dark"] .progress-line,:root[data-theme="dark"] .directory-progress,:root[data-theme="dark"] .completion-progress{background:#2b3b32}
+:root[data-theme="dark"] .progress-fill,:root[data-theme="dark"] .directory-progress-fill,:root[data-theme="dark"] .completion-fill{background:linear-gradient(90deg,#22966e,#69d6a5)}
