@@ -495,3 +495,9 @@ img{max-width:100%}
 .qj-delete-confirm .btn{margin-right:6px}
 .qj-modal-done{width:100%;margin-top:8px}
 @media(max-width:480px){.qj-modal-backdrop{padding:8px;align-items:flex-end}.qj-modal{max-height:90vh;border-radius:20px 20px 12px 12px;padding:22px 14px 14px}.qj-entry-actions .btn{padding:10px 8px}}
+
+/* Keep today's existing progress inside each matching input section, not a separate large card */
+.qj-existing-inline{margin:8px 0 2px;padding:0;color:#315e4f;font-size:.9rem;line-height:1.5;overflow-wrap:anywhere}
+.qj-existing-inline[hidden]{display:none}
+.qj-existing-label{font-weight:700;color:var(--green)}
+.qj-existing-separator{padding:0 4px;color:#91a99b}
