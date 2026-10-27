@@ -457,3 +457,11 @@ img{max-width:100%}
 .student-detail-page .daily-history .daily-entry-item .mini-btn{
   margin:2px 0;
 }
+
+/* Keep progress ranges on one visual line; the table wrapper handles small-screen overflow. */
+.student-detail-page .daily-history td:nth-child(2),
+.student-detail-page .daily-history td:nth-child(3),
+.student-detail-page .daily-history td:nth-child(4),
+.student-detail-page .daily-history td:nth-child(5){
+  white-space:nowrap;
+}
