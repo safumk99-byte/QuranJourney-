@@ -427,3 +427,33 @@ img{max-width:100%}
 .challenge-answer .review-select select{min-height:48px}
 .challenge-answer .review-select textarea{resize:vertical}
 .challenge-answer{padding:20px;border-radius:20px;border:1px solid #dce9e2;margin:16px 0;background:#fff}
+
+
+/* QuranJourney: same-day progress stays on one row; values flow inline without misleading separators. */
+.student-detail-page .daily-history .daily-entry-item{
+  display:inline;
+  padding:0;
+  margin:0;
+  border:0;
+  min-width:0;
+  line-height:1.65;
+  white-space:normal;
+}
+.student-detail-page .daily-history .daily-entry-item + .daily-entry-item::before{
+  content:" · ";
+  color:var(--muted);
+  font-weight:500;
+}
+.student-detail-page .daily-history td{
+  vertical-align:middle;
+}
+.student-detail-page .daily-history td:nth-child(2),
+.student-detail-page .daily-history td:nth-child(3),
+.student-detail-page .daily-history td:nth-child(4),
+.student-detail-page .daily-history td:nth-child(5),
+.student-detail-page .daily-history td:nth-child(7){
+  min-width:130px;
+}
+.student-detail-page .daily-history .daily-entry-item .mini-btn{
+  margin:2px 0;
+}
