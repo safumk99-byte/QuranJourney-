@@ -437,6 +437,20 @@ app = FastAPI(title="Quran Journey API", version="0.1.0")
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "https://safumk99-byte.github.io").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 
+def current_month_bounds(reference: date | None = None) -> tuple[date, date]:
+    """Return the inclusive date range for the current calendar month.
+    Point records remain in storage; aggregate point boards use this range so totals
+    automatically start fresh on the first day of each month without deleting history.
+    """
+    today = reference or date.today()
+    first = today.replace(day=1)
+    if first.month == 12:
+        next_month = first.replace(year=first.year + 1, month=1)
+    else:
+        next_month = first.replace(month=first.month + 1)
+    return first, next_month - timedelta(days=1)
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -770,16 +784,29 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
 
 @app.get("/discipline/summary")
 def discipline_summary(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    month_start, month_end = current_month_bounds()
     students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
-    rows = db.scalars(select(DisciplineEntry).where(DisciplineEntry.is_reversed.is_(False))).all()
+    rows = db.scalars(select(DisciplineEntry).where(
+        DisciplineEntry.is_reversed.is_(False),
+        DisciplineEntry.incident_date >= month_start,
+        DisciplineEntry.incident_date <= month_end,
+    )).all()
     totals: dict[int, int] = {}
     for row in rows:
         totals[row.student_id] = totals.get(row.student_id, 0) + row.points_deducted
     earned: dict[int, float] = {}
-    reading_rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(Student.is_active.is_(True))).all()
+    reading_rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(
+        Student.is_active.is_(True),
+        ReadingEntry.entry_date >= month_start,
+        ReadingEntry.entry_date <= month_end,
+    )).all()
     for entry in reading_rows:
         earned[entry.student_id] = earned.get(entry.student_id, 0.0) + reading_page_count(entry.pages) * 10 + reading_page_count(entry.recent_pages) + reading_page_count(entry.general_pages)
-    return [{"student_id": s.id, "name": s.name, "class_name": s.class_name, "academic_points": round(earned.get(s.id, 0), 1), "discipline_points_deducted": totals.get(s.id, 0), "final_points": round(earned.get(s.id, 0) - totals.get(s.id, 0), 1)} for s in students]
+    return [{"student_id": s.id, "name": s.name, "class_name": s.class_name,
+        "month": month_start.strftime("%Y-%m"),
+        "academic_points": round(earned.get(s.id, 0), 1),
+        "discipline_points_deducted": totals.get(s.id, 0),
+        "final_points": round(earned.get(s.id, 0) - totals.get(s.id, 0), 1)} for s in students]
 
 @app.get("/discipline/{student_id}")
 def discipline_history(student_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -818,10 +845,15 @@ def reverse_discipline_entry(entry_id: int, data: DisciplineReverseInput, user: 
 
 @app.get("/points/leaderboard")
 def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    """Return all active students ranked by activity points earned from reading entries."""
+    """Rank reading activity points for the current calendar month; keep older entries as history."""
+    month_start, month_end = current_month_bounds()
     active_students = db.scalars(select(Student).where(Student.is_active.is_(True))).all()
     totals = {student.id: {"new_lesson_points": 0.0, "recent_revision_points": 0.0, "general_revision_points": 0.0} for student in active_students}
-    rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(Student.is_active.is_(True))).all()
+    rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(
+        Student.is_active.is_(True),
+        ReadingEntry.entry_date >= month_start,
+        ReadingEntry.entry_date <= month_end,
+    )).all()
     def page_value(value):
         try:
             number = float(value or 0)
@@ -841,6 +873,7 @@ def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depe
         student = students_by_id[student_id]
         total = values["new_lesson_points"] + values["recent_revision_points"] + values["general_revision_points"]
         result.append({"student_id": student.id, "name": student.name, "class_name": student.class_name,
+            "month": month_start.strftime("%Y-%m"),
             "new_lesson_points": values["new_lesson_points"], "recent_revision_points": values["recent_revision_points"],
             "general_revision_points": values["general_revision_points"], "total_points": total})
     result.sort(key=lambda item: (-item["total_points"], item["name"].casefold()))
@@ -988,11 +1021,17 @@ def _challenge_session_json(row: ChallengeSession):
 
 @app.get("/challenge/leaderboard")
 def challenge_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    """Separate Quran challenge marks leaderboard; never adds these marks to progress points."""
+    """Show only current-month confirmed challenge marks; preserve all older sessions as history."""
+    month_start, month_end = current_month_bounds()
     rows = db.execute(
         select(Student, ChallengeSession)
         .join(ChallengeSession, ChallengeSession.student_id == Student.id)
-        .where(ChallengeSession.confirmed.is_(True), Student.is_active.is_(True))
+        .where(
+            ChallengeSession.confirmed.is_(True),
+            Student.is_active.is_(True),
+            ChallengeSession.challenge_date >= month_start,
+            ChallengeSession.challenge_date <= month_end,
+        )
         .order_by(ChallengeSession.challenge_date.desc())
     ).all()
     totals = {}
@@ -1000,6 +1039,7 @@ def challenge_leaderboard(user: User = Depends(require_teacher), db: Session = D
         entry = totals.setdefault(student.id, {
             "student_id": student.id, "name": student.name,
             "class_name": student.class_name or "Unassigned class",
+            "month": month_start.strftime("%Y-%m"),
             "total_marks": 0, "challenges_completed": 0,
         })
         entry["total_marks"] += int(session.score or 0)
