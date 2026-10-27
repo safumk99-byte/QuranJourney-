@@ -325,10 +325,11 @@ class ParentInput(BaseModel):
 SURAH_AYAH_COUNTS = [7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6]
 
 def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_ayah: int) -> None:
-    if start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
+    # Daily progress supports forward and backward recitation ranges.
+    if not (1 <= start_surah <= 114 and 1 <= end_surah <= 114):
+        raise ValueError("Surah number must be between 1 and 114")
+    if start_ayah < 1 or end_ayah < 1 or start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
         raise ValueError("Ayah number exceeds the selected Surah's length")
-    if end_surah < start_surah or (end_surah == start_surah and end_ayah < start_ayah):
-        raise ValueError("End Surah/Ayah must not come before Start Surah/Ayah")
 
 class ReadingInput(BaseModel):
     entry_date: datetime
