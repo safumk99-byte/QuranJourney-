@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><script>(()=>{try{const s=localStorage.getItem('qj-theme');const d=s==='dark'||(s!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';document.documentElement.style.colorScheme=d?'dark':'light'}catch(_){}})();</script><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b5b46"><title>Quran Journey | Teacher Dashboard</title>
-<link rel="stylesheet" href="style.css?v=monthly-points-20261027"><script src="./config.js"></script><script src="./auth.js"></script><script>document.documentElement.style.visibility='hidden';if(window.QuranJourneyAuth.requireRole(['teacher'])){document.documentElement.style.visibility='visible';window.addEventListener('DOMContentLoaded',()=>{const h=document.querySelector('.topbar');if(h&&!document.getElementById('qjLogout')){const b=document.createElement('button');b.id='qjLogout';b.type='button';b.className='top-pill nav-pill';b.textContent='Log out';b.style.border='0';b.addEventListener('click',()=>window.QuranJourneyAuth.logout());h.appendChild(b)}})}</script>
+<link rel="stylesheet" href="style.css?v=dark-mode-20261027"><script src="./config.js"></script><script src="./auth.js"></script><script>document.documentElement.style.visibility='hidden';if(window.QuranJourneyAuth.requireRole(['teacher'])){document.documentElement.style.visibility='visible';window.addEventListener('DOMContentLoaded',()=>{const h=document.querySelector('.topbar');if(h&&!document.getElementById('qjLogout')){const b=document.createElement('button');b.id='qjLogout';b.type='button';b.className='top-pill nav-pill';b.textContent='Log out';b.style.border='0';b.addEventListener('click',()=>window.QuranJourneyAuth.logout());h.appendChild(b)}})}</script>
 
 <meta name="description" content="A simple, beautiful Quran learning progress tracker for teachers and families.">
 <link rel="manifest" href="./manifest.json">
@@ -46,4 +46,4 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
   });
 }
 </script>
-<script src="./nav.js"></script></body></html>
+<script src="./nav.js"></script><script src="./theme.js?v=dark-mode-20261027"></script></body></html>
