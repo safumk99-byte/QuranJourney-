@@ -465,3 +465,12 @@ img{max-width:100%}
 .student-detail-page .daily-history td:nth-child(5){
   white-space:nowrap;
 }
+
+/* QuranJourney: date-level actions and same-day progress preview */
+.student-detail-page .date-progress-preview{margin:16px 0;padding:14px 16px;border:1px solid #cbded3;border-radius:14px;background:#f0f8f3;color:var(--ink);line-height:1.6}
+.student-detail-page .date-progress-preview[hidden]{display:none}
+.student-detail-page .date-progress-preview strong{color:var(--green)}
+.student-detail-page .date-progress-preview ol{margin:8px 0;padding-left:24px}
+.student-detail-page .date-progress-preview li{margin:5px 0;overflow-wrap:anywhere}
+.student-detail-page .daily-history td:last-child{white-space:nowrap;min-width:95px}
+.student-detail-page .daily-history td:last-child .mini-btn{background:var(--mint);color:var(--green);border:1px solid #cbded3;border-radius:8px;padding:8px 12px;font-weight:700}
