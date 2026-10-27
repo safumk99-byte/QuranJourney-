@@ -474,3 +474,24 @@ img{max-width:100%}
 .student-detail-page .date-progress-preview li{margin:5px 0;overflow-wrap:anywhere}
 .student-detail-page .daily-history td:last-child{white-space:nowrap;min-width:95px}
 .student-detail-page .daily-history td:last-child .mini-btn{background:var(--mint);color:var(--green);border:1px solid #cbded3;border-radius:8px;padding:8px 12px;font-weight:700}
+
+/* Native-looking mobile-friendly manager for all progress entries on one date */
+.qj-modal-backdrop{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,30,25,.58);overflow-y:auto}
+.qj-modal-backdrop[hidden]{display:none}
+.qj-modal{position:relative;width:min(100%,560px);max-height:88vh;overflow-y:auto;background:#fff;border-radius:22px;padding:24px 18px 18px;box-shadow:0 20px 70px rgba(0,0,0,.25);color:var(--ink)}
+.qj-modal h2{margin:0 42px 5px 0;color:var(--green);font-size:1.35rem}
+.qj-modal-subtitle{margin:0 0 16px;color:var(--muted)}
+.qj-modal-close{position:absolute;right:14px;top:12px;width:40px;height:40px;border:0;border-radius:50%;background:#eef6f0;color:var(--green);font-size:28px;line-height:1}
+.qj-entry-card{border:1px solid #d7e6dc;border-radius:14px;padding:14px;margin:12px 0;background:#f8fcf9}
+.qj-entry-card h3{margin:0 0 10px;color:var(--green);font-size:1rem}
+.qj-entry-detail{display:flex;flex-direction:column;gap:3px;margin:9px 0;overflow-wrap:anywhere}
+.qj-entry-detail span{font-size:.78rem;color:var(--muted)}
+.qj-entry-detail strong{font-weight:600;white-space:normal}
+.qj-entry-actions{display:flex;gap:10px;margin-top:14px}
+.qj-entry-actions .btn{flex:1;min-height:42px}
+.qj-modal .btn.danger,.qj-entry-actions .btn.danger{background:#fff0ef;color:#a52d27;border:1px solid #eac2bf}
+.qj-delete-confirm{position:sticky;bottom:0;margin:12px -4px 0;padding:14px;border-radius:12px;background:#fff3f2;border:1px solid #efc8c5;box-shadow:0 -5px 18px rgba(0,0,0,.06)}
+.qj-delete-confirm p{margin:0 0 12px}
+.qj-delete-confirm .btn{margin-right:6px}
+.qj-modal-done{width:100%;margin-top:8px}
+@media(max-width:480px){.qj-modal-backdrop{padding:8px;align-items:flex-end}.qj-modal{max-height:90vh;border-radius:20px 20px 12px 12px;padding:22px 14px 14px}.qj-entry-actions .btn{padding:10px 8px}}
