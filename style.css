@@ -506,3 +506,37 @@ img{max-width:100%}
 .student-detail-page .end-surah-field{position:relative}
 .student-detail-page .same-surah-btn{display:inline-flex;align-items:center;justify-content:center;margin-top:7px;padding:5px 12px;min-height:30px;border:0;border-radius:999px;background:linear-gradient(135deg,#0d9272,#36b77c);color:#fff;font-size:.78rem;font-weight:800;letter-spacing:.2px;box-shadow:0 3px 8px rgba(13,146,114,.2);cursor:pointer}
 .student-detail-page .same-surah-btn:active,.student-detail-page .same-surah-btn.is-used{background:linear-gradient(135deg,#2563eb,#60a5fa);transform:scale(.97)}
+
+/* QuranJourney responsive dark mode: shared tokens and readable contrast */
+:root{color-scheme:light;--green:#0b5b46;--deep:#073d32;--mint:#e7f3ec;--gold:#d5ad61;--ink:#18352c;--muted:#718078;--line:#dce5ec;--paper:#eef3f7;--surface:#fff;--surface-2:#f6faf7;--field:#fff;--table-head:#edf3f7;--shadow:rgba(0,0,0,.12)}
+:root[data-theme="dark"]{color-scheme:dark;--green:#4fd0a2;--deep:#a4ead0;--mint:#203a32;--gold:#f0cf83;--ink:#e3eee9;--muted:#a4b7ae;--line:#344740;--paper:#101815;--surface:#19231f;--surface-2:#202d27;--field:#131d19;--table-head:#25362f;--shadow:rgba(0,0,0,.3)}
+:root[data-theme="dark"] body{background:var(--paper);color:var(--ink)}
+:root[data-theme="dark"] .topbar,:root[data-theme="dark"] .panel,:root[data-theme="dark"] .stat,:root[data-theme="dark"] .student-card,:root[data-theme="dark"] .login-card,:root[data-theme="dark"] .qj-modal,:root[data-theme="dark"] .qj-entry-card,:root[data-theme="dark"] .attendance-filter,:root[data-theme="dark"] .attendance-report,:root[data-theme="dark"] .challenge-panel,:root[data-theme="dark"] .directory-card,:root[data-theme="dark"] .directory-item{background:var(--surface);color:var(--ink);border-color:var(--line);box-shadow:0 6px 22px var(--shadow)}
+:root[data-theme="dark"] .brand,:root[data-theme="dark"] .section-head h2,:root[data-theme="dark"] .stat strong,:root[data-theme="dark"] .student-bottom strong,:root[data-theme="dark"] .login-card h1,:root[data-theme="dark"] h1,:root[data-theme="dark"] h2,:root[data-theme="dark"] h3{color:var(--deep)}
+:root[data-theme="dark"] p,:root[data-theme="dark"] label,:root[data-theme="dark"] .tagline,:root[data-theme="dark"] .note,:root[data-theme="dark"] .student-meta,:root[data-theme="dark"] .stat-top,:root[data-theme="dark"] .student-bottom div,:root[data-theme="dark"] footer{color:var(--muted)}
+:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea,:root[data-theme="dark"] .toolbar input,:root[data-theme="dark"] .toolbar select{background:var(--field);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] input::placeholder,:root[data-theme="dark"] textarea::placeholder{color:#8ca197}
+:root[data-theme="dark"] .mini-btn,:root[data-theme="dark"] .secondary,:root[data-theme="dark"] .qj-modal-close{background:#293a32;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .preview,:root[data-theme="dark"] .empty,:root[data-theme="dark"] .qj-existing-inline,:root[data-theme="dark"] .date-progress-preview,:root[data-theme="dark"] .qj-entry-card,:root[data-theme="dark"] .student-bottom,:root[data-theme="dark"] .marks-table th{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .preview-label,:root[data-theme="dark"] .date-progress-preview strong,:root[data-theme="dark"] .qj-existing-label{color:var(--green)}
+:root[data-theme="dark"] .table-wrap{border-color:var(--line)}
+:root[data-theme="dark"] table,:root[data-theme="dark"] .marks-table{background:var(--surface);color:var(--ink)}
+:root[data-theme="dark"] th,:root[data-theme="dark"] td,:root[data-theme="dark"] .marks-table th,:root[data-theme="dark"] .marks-table td{color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .marks-table th{background:var(--table-head)}
+:root[data-theme="dark"] .marks-table tbody tr:nth-child(even),:root[data-theme="dark"] tbody tr:nth-child(even){background:#1c2923}
+:root[data-theme="dark"] .marks-table tbody tr:hover,:root[data-theme="dark"] tbody tr:hover{background:#26382f}
+:root[data-theme="dark"] .directory-hero,:root[data-theme="dark"] .challenge-hero,:root[data-theme="dark"] .hero{box-shadow:none}
+:root[data-theme="dark"] .challenge-notice,:root[data-theme="dark"] .attendance-notice,:root[data-theme="dark"] .discipline-note{background:#22372e;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .qj-delete-confirm{background:#3a2524;color:#ffe4e1;border-color:#784441}
+:root[data-theme="dark"] .login-error{background:#3a2524;color:#ffd9d5}
+:root[data-theme="dark"] .btn.danger,:root[data-theme="dark"] .danger{background:#512b2a;color:#ffe8e6;border-color:#794744}
+:root[data-theme="dark"] a{color:#7eddbb}
+:root[data-theme="dark"] .top-pill,:root[data-theme="dark"] .qj-nav-link{background:#24372f;color:#d9eee4}
+:root[data-theme="dark"] .qj-nav-link.active{background:#285b49;color:#e5fff4}
+.qj-theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:0 0 auto;min-height:38px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px var(--shadow);transition:background .18s,border-color .18s,transform .18s;z-index:20}
+.qj-theme-toggle:hover{transform:translateY(-1px);border-color:var(--green)}
+.qj-theme-toggle:focus-visible{outline:3px solid #4fae89;outline-offset:3px}
+.qj-theme-toggle span[aria-hidden="true"]{font-size:17px;line-height:1}
+.qj-theme-floating{position:fixed;right:14px;bottom:18px;box-shadow:0 4px 18px var(--shadow)}
+:root[data-theme="dark"] .qj-theme-toggle{background:#25372f;color:#e5f5ed;border-color:#465c50}
+@media(max-width:560px){.qj-theme-toggle{min-height:35px;padding:7px 10px;font-size:12px}.qj-theme-label{display:inline}.qj-theme-floating{right:12px;bottom:14px}}
