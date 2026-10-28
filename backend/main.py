@@ -120,6 +120,19 @@ class DailyMark(Base):
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class ParentNotification(Base):
+    __tablename__ = "parent_notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    event_key: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    message: Mapped[str] = mapped_column(Text)
+    notification_type: Mapped[str] = mapped_column(String(40), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class DisciplineEntry(Base):
     __tablename__ = "discipline_entries"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -491,6 +504,17 @@ def check_student_access(student_id: int, user: User, db: Session) -> None:
     if user.role != "parent" or student_id not in (allowed_student_ids(user, db) or set()):
         raise HTTPException(status_code=403, detail="You cannot access this student's records")
 
+def notify_student_parents(db: Session, student_id: int, event_key: str, title: str, message: str, notification_type: str) -> None:
+    """Create one in-app notification per linked parent; unique event keys prevent duplicates."""
+    parent_ids = db.scalars(select(ParentStudent.parent_user_id).where(ParentStudent.student_id == student_id)).all()
+    for parent_id in set(parent_ids):
+        key = f"{event_key}:parent:{parent_id}"
+        if db.scalar(select(ParentNotification.id).where(ParentNotification.event_key == key)):
+            continue
+        db.add(ParentNotification(parent_user_id=parent_id, student_id=student_id, event_key=key,
+                                  title=title, message=message, notification_type=notification_type))
+
+
 def reading_page_count(value: str | None) -> float:
     """Count non-negative whole and half-page values; ignore labels/ranges."""
     if value is None:
@@ -512,10 +536,15 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     student = db.get(Student, student_id)
     if student is None:
         return
+    old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     student.completed_pages = min(
         student.total_pages,
         max(0, student.completed_pages + delta),
     )
+    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    if new_percent > old_percent:
+        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
+                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
 
 @app.on_event("startup")
 def startup() -> None:
@@ -607,6 +636,13 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
         journey_start_date=data.journey_start_date, photo_data=data.photo_data,
     )
     db.add(student)
+    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    if new_percent > old_percent:
+        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
+                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
+    if int(student.current_juz or 1) > old_juz:
+        notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
+                               f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
@@ -620,6 +656,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     values = data.model_dump(exclude_unset=True)
+    old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    old_juz = int(student.current_juz or 1)
     if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
         raise HTTPException(status_code=409, detail="Student code already exists")
     total_pages = values.get("total_pages", student.total_pages)
@@ -664,6 +702,31 @@ def create_parent(data: ParentInput, user: User = Depends(require_teacher), db: 
         db.add(ParentStudent(parent_user_id=parent.id, student_id=student.id))
     db.commit()
     return {"id": parent.id, "login_id": parent.login_id, "role": parent.role, "linked_students": len(students)}
+
+@app.get("/parent/notifications")
+def get_parent_notifications(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role != "parent":
+        raise HTTPException(status_code=403, detail="Parent access required")
+    rows = db.scalars(select(ParentNotification).where(ParentNotification.parent_user_id == user.id)
+                      .order_by(ParentNotification.created_at.desc()).limit(100)).all()
+    return [{"id": r.id, "student_id": r.student_id, "title": r.title, "message": r.message,
+             "type": r.notification_type, "created_at": r.created_at.isoformat(),
+             "read": r.read_at is not None} for r in rows]
+
+
+@app.post("/parent/notifications/{notification_id}/read")
+def mark_parent_notification_read(notification_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.role != "parent":
+        raise HTTPException(status_code=403, detail="Parent access required")
+    row = db.scalar(select(ParentNotification).where(ParentNotification.id == notification_id,
+                                                      ParentNotification.parent_user_id == user.id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if row.read_at is None:
+        row.read_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"id": row.id, "read": True}
+
 
 @app.post("/migration/localstorage")
 def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -968,12 +1031,19 @@ def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(
         raise HTTPException(status_code=404, detail="Student not found")
     day = data.attendance_date.date()
     row = db.scalar(select(Attendance).where(Attendance.student_id == student_id, Attendance.attendance_date == day, Attendance.period == data.period).order_by(Attendance.id.desc()))
+    previous_status = row.status if row else None
     if row:
         row.status = data.status
         row.remarks = data.remarks
     else:
         row = Attendance(student_id=student_id, attendance_date=day, period=data.period, status=data.status, remarks=data.remarks)
         db.add(row)
+    if data.status in {"absent", "leave"} and previous_status != data.status:
+        student = db.get(Student, student_id)
+        status_label = "Absent" if data.status == "absent" else "Leave"
+        notify_student_parents(db, student_id, f"attendance:{day.isoformat()}:period:{data.period}:status:{data.status}",
+                               f"Attendance: {status_label}", f"{student.name} was marked {status_label.lower()} on {day.isoformat()} (period {data.period}).",
+                               "attendance")
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.attendance_date.isoformat(), "period": row.period, "status": row.status}
