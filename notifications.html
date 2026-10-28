@@ -1,5 +1,18 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b5b46"><title>Teacher Notifications | Quran Journey"><link rel="stylesheet" href="./style.css?v=dark-mode-20261027b"><script src="./config.js"></script><script src="./auth.js"></script><script>try{if(!window.QuranJourneyAuth||!window.QuranJourneyAuth.requireRole(['teacher'])){document.documentElement.dataset.authPending='true';}}catch(e){document.documentElement.dataset.authError='true';console.error('Quran Journey teacher page authentication check failed:',e);}</script><link rel="manifest" href="./manifest.json"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b5b46"><title>Teacher Notifications | Quran Journey"><link rel="stylesheet" href="./style.css?v=dark-mode-20261027b"><script src="./config.js"></script><script src="./auth.js"></script><script>try{if(!window.QuranJourneyAuth||!window.QuranJourneyAuth.requireRole(['teacher'])){document.documentElement.dataset.authPending='true';}}catch(e){document.documentElement.dataset.authError='true';console.error('Quran Journey teacher page authentication check failed:',e);}</script><style>
+html,body{min-height:100%;background:#eef3f7!important;color:#18352c!important}
+body.teacher-notifications-page{display:block!important;visibility:visible!important;opacity:1!important;font-family:Arial,sans-serif!important;margin:0!important}
+.teacher-notifications-page .container{display:block!important;max-width:900px;margin:0 auto;padding:20px!important}
+.teacher-notifications-page .topbar{display:flex!important;min-height:70px;align-items:center;background:#fff!important;padding:12px 20px!important}
+.teacher-notifications-page .hero{display:block!important;background:#084b3b!important;color:#fff!important;padding:24px!important;border-radius:16px;margin-bottom:18px}
+.teacher-notifications-page .panel{display:block!important;background:#fff!important;color:#18352c!important;padding:20px!important;border-radius:14px;border:1px solid #dce5ec!important}
+.teacher-notifications-page h1,.teacher-notifications-page h2,.teacher-notifications-page p,.teacher-notifications-page label{visibility:visible!important;opacity:1!important}
+.teacher-notifications-page label{display:block!important;margin:14px 0!important;font-weight:600}
+.teacher-notifications-page input,.teacher-notifications-page select,.teacher-notifications-page textarea{display:block!important;width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border:1px solid #bdc9c3;border-radius:8px;background:#fff!important;color:#18352c!important;font:inherit}
+.teacher-notifications-page textarea{min-height:120px}
+.teacher-notifications-page button{padding:12px 16px;border:0;border-radius:8px;background:#0b5b46;color:#fff;font-weight:700}
+#notificationStatus{display:block!important;min-height:24px;overflow-wrap:anywhere}
+</style><link rel="manifest" href="./manifest.json"></head>
 <body class="teacher-notifications-page"><header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Send updates to parents</div></div></header>
 <main class="container"><section class="hero"><div><div class="eyebrow">TEACHER WORKSPACE</div><h1>Parent Notifications</h1><p>Send a message to parents of a selected student, or announce it to parents of all students.</p></div><div class="hero-art" aria-hidden="true">✉<span>Quran Journey</span></div></section>
 <section class="panel teacher-notification-panel"><div class="section-head"><div><div class="eyebrow green">CREATE NOTIFICATION</div><h2>New parent message</h2></div></div>
