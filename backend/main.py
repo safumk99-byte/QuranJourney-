@@ -536,10 +536,15 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     student = db.get(Student, student_id)
     if student is None:
         return
+    old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     student.completed_pages = min(
         student.total_pages,
         max(0, student.completed_pages + delta),
     )
+    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    if new_percent > old_percent:
+        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
+                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
 
 @app.on_event("startup")
 def startup() -> None:
