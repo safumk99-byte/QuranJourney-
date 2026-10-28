@@ -1,24 +1,52 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b5b46"><title>Teacher Notifications | Quran Journey"><link rel="stylesheet" href="./style.css?v=dark-mode-20261027b"><script src="./config.js"></script><script src="./auth.js"></script><script>try{if(!window.QuranJourneyAuth||!window.QuranJourneyAuth.requireRole(['teacher'])){document.documentElement.dataset.authPending='true';}}catch(e){document.documentElement.dataset.authError='true';console.error('Quran Journey teacher page authentication check failed:',e);}</script><style>
-html,body{min-height:100%;background:#eef3f7!important;color:#18352c!important}
-body.teacher-notifications-page{display:block!important;visibility:visible!important;opacity:1!important;font-family:Arial,sans-serif!important;margin:0!important}
-.teacher-notifications-page .container{display:block!important;max-width:900px;margin:0 auto;padding:20px!important}
-.teacher-notifications-page .topbar{display:flex!important;min-height:70px;align-items:center;background:#fff!important;padding:12px 20px!important}
-.teacher-notifications-page .hero{display:block!important;background:#084b3b!important;color:#fff!important;padding:24px!important;border-radius:16px;margin-bottom:18px}
-.teacher-notifications-page .panel{display:block!important;background:#fff!important;color:#18352c!important;padding:20px!important;border-radius:14px;border:1px solid #dce5ec!important}
-.teacher-notifications-page h1,.teacher-notifications-page h2,.teacher-notifications-page p,.teacher-notifications-page label{visibility:visible!important;opacity:1!important}
-.teacher-notifications-page label{display:block!important;margin:14px 0!important;font-weight:600}
-.teacher-notifications-page input,.teacher-notifications-page select,.teacher-notifications-page textarea{display:block!important;width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border:1px solid #bdc9c3;border-radius:8px;background:#fff!important;color:#18352c!important;font:inherit}
-.teacher-notifications-page textarea{min-height:120px}
-.teacher-notifications-page button{padding:12px 16px;border:0;border-radius:8px;background:#0b5b46;color:#fff;font-weight:700}
-#notificationStatus{display:block!important;min-height:24px;overflow-wrap:anywhere}
-</style><link rel="manifest" href="./manifest.json"></head>
-<body class="teacher-notifications-page"><header class="topbar"><div class="brandmark">۞</div><div><div class="brand">Quran Journey</div><div class="tagline">Send updates to parents</div></div></header>
-<main class="container"><section class="hero"><div><div class="eyebrow">TEACHER WORKSPACE</div><h1>Parent Notifications</h1><p>Send a message to parents of a selected student, or announce it to parents of all students.</p></div><div class="hero-art" aria-hidden="true">✉<span>Quran Journey</span></div></section>
-<section class="panel teacher-notification-panel"><div class="section-head"><div><div class="eyebrow green">CREATE NOTIFICATION</div><h2>New parent message</h2></div></div>
-<form id="notificationForm"><label>Recipients<select id="studentId" required><option value="all">All students — all linked parents</option></select><small>Only parents linked to the selected student(s) will receive the message.</small></label>
-<label>Title<input id="notificationTitle" type="text" maxlength="180" required placeholder="e.g. Important class update"></label>
-<label>Message<textarea id="notificationMessage" rows="5" maxlength="2000" required placeholder="Write the message for parents…"></textarea><small>Maximum 2,000 characters.</small></label>
-<div class="notification-preview"><strong>Note</strong><span>This creates an in-app notification in the Parent Dashboard. It does not send SMS, WhatsApp, email, or phone push notifications.</span></div>
-<div class="notification-actions"><button class="btn secondary" type="reset">Clear</button><button class="btn primary" type="submit" id="sendNotificationBtn">Send Notification</button></div><p id="notificationStatus" role="status" aria-live="polite"></p></form></section><footer>Quran Journey <span>•</span> Teacher Notifications</footer></main>
-<script src="./notifications.js?v=teacher-parent-notifications-20261028"></script><script src="./nav.js"></script><script src="./theme.js?v=dark-mode-20261027"></script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b5b46">
+<title>Teacher Notifications | Quran Journey</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#f1f5f3;color:#18352c;font-family:Arial,sans-serif}body{display:block!important;visibility:visible!important;opacity:1!important}.bar{background:#0b5b46;color:white;padding:18px 16px;font-weight:700;font-size:20px}.wrap{width:min(760px,100%);margin:0 auto;padding:18px 14px 40px}.hero{background:#084b3b;color:#fff;padding:22px 18px;border-radius:14px;margin-bottom:16px}.hero h1{margin:0 0 8px;font-size:25px}.hero p{margin:0;line-height:1.5}.card{background:#fff;border:1px solid #d7e2dc;border-radius:14px;padding:18px;box-shadow:0 4px 14px #153b2810}.card h2{font-size:19px;margin:0 0 18px}label{display:block;font-weight:700;margin:15px 0;color:#314b3e}label small{display:block;font-weight:400;color:#687a70;margin-top:6px;line-height:1.4}input,select,textarea{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid #bdcdc3;border-radius:8px;background:#fff;color:#18352c;font:inherit}textarea{min-height:125px;resize:vertical}button{width:100%;padding:13px;border:0;border-radius:9px;background:#0b5b46;color:#fff;font-weight:700;font-size:16px;margin-top:10px}button:disabled{opacity:.6}#notificationStatus{display:block;margin-top:12px;line-height:1.5;overflow-wrap:anywhere}.err{color:#a52828;background:#fff0ef;padding:10px;border-radius:8px}.ok{color:#17623a;background:#e8f7ec;padding:10px;border-radius:8px}.hint{font-size:12px;color:#62776b;margin-top:14px}
+</style>
+<script src="./config.js?v=259b9f1"></script>
+<script src="./auth.js?v=259b9f1"></script>
+</head>
+<body>
+<header class="bar">Quran Journey · Teacher</header>
+<main class="wrap">
+<section class="hero"><h1>Parent Notifications</h1><p>Send an in-app message to the parents of a selected student or to all linked parents.</p></section>
+<section class="card">
+<h2>Create notification</h2>
+<form id="notificationForm">
+<label>Recipients<select id="studentId" required><option value="all">All students — all linked parents</option></select><small>Only linked parent accounts receive the notification.</small></label>
+<label>Title<input id="notificationTitle" maxlength="180" required placeholder="e.g. Important class update"></label>
+<label>Message<textarea id="notificationMessage" maxlength="2000" required placeholder="Write your message to parents"></textarea></label>
+<button id="sendNotificationBtn" type="submit">Send Notification</button>
+<p id="notificationStatus" role="status" aria-live="polite">Loading teacher notification form…</p>
+</form>
+<p class="hint">This is an in-app notification in the Parent Dashboard; it does not send SMS or WhatsApp.</p>
+</section>
+</main>
+<script>
+(function(){
+ const status=document.getElementById('notificationStatus');
+ function showError(message){status.className='err';status.textContent=message;}
+ try {
+  const A=window.QuranJourneyAuth;
+  if(!A){showError('Page loaded, but authentication script did not load. Refresh the page or sign in again.');return;}
+  if(!A.requireRole(['teacher']))return;
+  const form=document.getElementById('notificationForm'),select=document.getElementById('studentId'),send=document.getElementById('sendNotificationBtn');
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  A.api('/students').then(rows=>{select.innerHTML='<option value="all">All students — all linked parents</option>'+rows.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+' — '+esc(s.class_name||'Unassigned class')+'</option>').join('');status.className='';status.textContent='Ready to send.';}).catch(e=>showError('Could not load students: '+e.message));
+  form.addEventListener('submit',async e=>{
+   e.preventDefault();const title=document.getElementById('notificationTitle').value.trim(),message=document.getElementById('notificationMessage').value.trim();
+   if(title.length<2||message.length<2){showError('Enter a title and message (at least 2 characters each).');return;}
+   send.disabled=true;send.textContent='Sending…';status.className='';status.textContent='';
+   try{const v=select.value;const result=await A.api('/teacher/notifications',{method:'POST',body:JSON.stringify({student_id:v==='all'?null:Number(v),title,message})});status.className='ok';status.textContent='Notification sent. '+result.recipients+' parent account(s) notified across '+result.students_notified+' student(s).';document.getElementById('notificationTitle').value='';document.getElementById('notificationMessage').value='';}
+   catch(err){showError('Could not send notification: '+err.message);}
+   finally{send.disabled=false;send.textContent='Send Notification';}
+  });
+ } catch(e){showError('Page error: '+(e&&e.message?e.message:String(e)));}
+})();
+</script>
+</body></html>
