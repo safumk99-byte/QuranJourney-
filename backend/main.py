@@ -339,11 +339,13 @@ class ParentInput(BaseModel):
 SURAH_AYAH_COUNTS = [7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6]
 
 def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_ayah: int) -> None:
-    # Daily progress supports forward and backward recitation ranges.
     if not (1 <= start_surah <= 114 and 1 <= end_surah <= 114):
         raise ValueError("Surah number must be between 1 and 114")
     if start_ayah < 1 or end_ayah < 1 or start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
         raise ValueError("Ayah number exceeds the selected Surah's length")
+    # Reject a backwards range; start must precede or equal end in Quran order.
+    if (start_surah, start_ayah) > (end_surah, end_ayah):
+        raise ValueError("End Surah/Ayah must be after or equal to Start Surah/Ayah")
 
 class ReadingInput(BaseModel):
     entry_date: datetime
@@ -1001,14 +1003,16 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
     check_student_access(student_id, user, db)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
-    surah_ayah_values = (data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
-    if any(value is not None for value in surah_ayah_values):
-        if any(value is None for value in surah_ayah_values):
-            raise HTTPException(status_code=422, detail="All four Surah/Ayah fields must be provided together")
-        try:
-            validate_quran_range(data.start_surah, data.start_ayah, data.end_surah, data.end_ayah)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    for prefix in ("", "recent_", "general_"):
+        keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
+        supplied = tuple(getattr(data, key) for key in keys)
+        if any(value is not None for value in supplied):
+            if any(value is None for value in supplied):
+                raise HTTPException(status_code=422, detail=f"All four Surah/Ayah fields must be provided together for {prefix or 'new lesson'}")
+            try:
+                validate_quran_range(*supplied)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     db.add(row)
@@ -1207,7 +1211,7 @@ def generate_daily_challenge(student_id: int, challenge_date: date, user: User =
         ayah_text = ref.get("text", "").strip()
         if not ayah_text:
             raise HTTPException(status_code=502, detail=f"Verified Arabic text is missing for Surah {ref['surah']} Ayah {ref['ayah']}.")
-        expected = f"Surah {ref['surah_name']} {ref['surah']}:{ref['ayah']} (Juz {next((j for j in juz_numbers if any((a['surah'], a['ayah']) == (ref['surah'], ref['ayah']) for a in _JUZ_AYAH_CACHE.get(j, []))), juz_numbers[0])})"
+        expected = f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} (Juz {next((j for j in juz_numbers if any((a['surah'], a['ayah']) == (ref['surah'], ref['ayah']) for a in _JUZ_AYAH_CACHE.get(j, []))), juz_numbers[0])})"
         row.questions.append(ChallengeQuestion(question_no=idx, question_text=ayah_text, expected_answer=expected))
     db.commit()
     db.refresh(row)
