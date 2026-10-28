@@ -636,13 +636,6 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
         journey_start_date=data.journey_start_date, photo_data=data.photo_data,
     )
     db.add(student)
-    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
-    if new_percent > old_percent:
-        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
-                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
-    if int(student.current_juz or 1) > old_juz:
-        notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
-                               f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
@@ -666,6 +659,13 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
     for key, value in values.items():
         setattr(student, key, value)
+    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    if new_percent > old_percent:
+        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
+                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
+    if int(student.current_juz or 1) > old_juz:
+        notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
+                               f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
