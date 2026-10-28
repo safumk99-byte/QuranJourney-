@@ -187,6 +187,28 @@ class ChallengeQuestion(Base):
     teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     session: Mapped[ChallengeSession] = relationship(back_populates="questions")
 
+class ExamSession(Base):
+    __tablename__ = "exam_sessions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    exam_date: Mapped[date] = mapped_column(Date, index=True)
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    total_marks: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    questions: Mapped[list["ExamQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="ExamQuestion.question_no")
+
+class ExamQuestion(Base):
+    __tablename__ = "exam_questions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("exam_sessions.id", ondelete="CASCADE"), index=True)
+    question_no: Mapped[int] = mapped_column(Integer)
+    question_text: Mapped[str] = mapped_column(Text, default="")
+    expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_marks: Mapped[int] = mapped_column(Integer, default=5)
+    awarded_marks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session: Mapped[ExamSession] = relationship(back_populates="questions")
+
 class ChallengeAudioInput(BaseModel):
     audio_base64: str = Field(min_length=1, max_length=7_000_000)
     audio_type: str = Field(default="audio/webm", max_length=100)
@@ -224,6 +246,28 @@ class ChallengeSessionInput(BaseModel):
     questions: list[ChallengeQuestionInput] = Field(min_length=5, max_length=5)
     confirmed: bool = False
     score: int = Field(default=0, ge=0, le=100)
+
+class ExamGenerateInput(BaseModel):
+    date: date
+    question_count: int = Field(ge=1, le=100)
+
+class ExamQuestionInput(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    expected: str | None = Field(default=None, max_length=1000)
+    max_marks: int = Field(ge=1, le=1000)
+    awarded_marks: int | None = Field(default=None, ge=0, le=1000)
+    note: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_marks(self):
+        if self.awarded_marks is not None and self.awarded_marks > self.max_marks:
+            raise ValueError("Awarded marks cannot exceed maximum marks")
+        return self
+
+class ExamSaveInput(BaseModel):
+    date: date
+    confirmed: bool = False
+    questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
 
 class TeacherNotificationInput(BaseModel):
     student_id: int | None = Field(default=None, gt=0)
@@ -1202,6 +1246,96 @@ def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(
     if row is None: raise HTTPException(status_code=404, detail="Learning range not found")
     db.delete(row); db.commit()
     return Response(status_code=204)
+
+def _exam_json(row: ExamSession):
+    return {
+        "id": row.id, "date": row.exam_date.isoformat(), "confirmed": row.confirmed,
+        "total_marks": row.total_marks,
+        "questions": [{
+            "text": q.question_text, "expected": q.expected_answer or "",
+            "max_marks": q.max_marks, "awarded_marks": q.awarded_marks,
+            "note": q.teacher_note or ""
+        } for q in row.questions]
+    }
+
+@app.get("/students/{student_id}/exam/ranges")
+def exam_learning_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    rows = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id).order_by(ChallengeRange.id)).all()
+    return [{"id": r.id, "start_juz": r.start_juz, "end_juz": r.end_juz, "status": r.status, "note": r.note or ""} for r in rows]
+
+@app.get("/students/{student_id}/exam/sessions")
+def exam_sessions(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    rows = db.scalars(select(ExamSession).where(ExamSession.student_id == student_id).order_by(ExamSession.exam_date.desc(), ExamSession.id.desc())).all()
+    return [_exam_json(row) for row in rows]
+
+@app.post("/students/{student_id}/exam/generate")
+def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == data.date).order_by(ExamSession.id.desc()))
+    if row and row.confirmed:
+        raise HTTPException(status_code=409, detail="This exam is confirmed. Create a new exam date to generate another.")
+    ranges = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id)).all()
+    juz_numbers = sorted({j for r in ranges if r.start_juz and r.end_juz and r.status in ("Learning", "Completed") for j in range(r.start_juz, r.end_juz + 1)})
+    if not juz_numbers:
+        raise HTTPException(status_code=400, detail="Save the student's learning range in the Challenge section first.")
+    refs_by_key = {}
+    for juz_no in juz_numbers:
+        for ref in _juz_ayah_refs(juz_no):
+            refs_by_key[(ref["surah"], ref["ayah"])] = (ref, juz_no)
+    refs = list(refs_by_key.values())
+    if len(refs) < data.question_count:
+        raise HTTPException(status_code=400, detail=f"Only {len(refs)} ayahs are available in the saved learning range.")
+    chosen = random.SystemRandom().sample(refs, data.question_count)
+    if row:
+        row.questions.clear()
+        db.flush()
+        row.confirmed = False
+        row.total_marks = 0
+    else:
+        row = ExamSession(student_id=student_id, exam_date=data.date, confirmed=False, total_marks=0)
+        db.add(row)
+        db.flush()
+    for idx, (ref, juz_no) in enumerate(chosen, start=1):
+        row.questions.append(ExamQuestion(
+            question_no=idx, question_text=ref["text"],
+            expected_answer=f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} (Juz {juz_no})",
+            max_marks=5
+        ))
+    db.commit()
+    db.refresh(row)
+    return _exam_json(row)
+
+@app.put("/students/{student_id}/exam/sessions/{exam_date}")
+def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    if data.date != exam_date:
+        raise HTTPException(status_code=422, detail="Exam date does not match URL")
+    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date).order_by(ExamSession.id.desc()))
+    if row is None:
+        row = ExamSession(student_id=student_id, exam_date=exam_date)
+        db.add(row)
+        db.flush()
+    if row.confirmed:
+        raise HTTPException(status_code=409, detail="Confirmed exam marks cannot be edited.")
+    row.questions.clear()
+    db.flush()
+    total = 0
+    for idx, q in enumerate(data.questions, start=1):
+        awarded = q.awarded_marks
+        if data.confirmed and awarded is None:
+            raise HTTPException(status_code=422, detail=f"Enter marks for question {idx} before confirming.")
+        total += int(awarded or 0)
+        row.questions.append(ExamQuestion(
+            question_no=idx, question_text=q.text.strip(), expected_answer=q.expected,
+            max_marks=q.max_marks, awarded_marks=awarded, teacher_note=q.note
+        ))
+    row.confirmed = data.confirmed
+    row.total_marks = total if data.confirmed else 0
+    db.commit()
+    db.refresh(row)
+    return _exam_json(row)
 
 _JUZ_AYAH_CACHE: dict[int, list[dict]] = {}
 
