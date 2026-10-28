@@ -661,3 +661,77 @@ def test_daily_marks_validate_breakdown_and_can_be_deleted(client):
     assert remaining.status_code == 200
     assert all(row["id"] != mark_id for row in remaining.json())
 
+
+
+def test_parent_receives_absent_leave_and_progress_notifications(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    student_response = client.post("/students", headers=teacher_headers, json={
+        "student_code": "N-001", "name": "Notification Child", "total_pages": 100,
+        "completed_pages": 10, "current_juz": 1
+    })
+    assert student_response.status_code == 201, student_response.text
+    student = student_response.json()
+    parent_response = client.post("/parents", headers=teacher_headers, json={
+        "login_id": "notify_parent", "password": "Notify-Parent-Password-123!",
+        "student_ids": [student["id"]]
+    })
+    assert parent_response.status_code == 201, parent_response.text
+    parent_token = login(client, "notify_parent", "Notify-Parent-Password-123!").json()["access_token"]
+    parent_headers = auth(parent_token)
+
+    absent = client.post(f"/students/{student['id']}/attendance", headers=teacher_headers, json={
+        "attendance_date": "2026-10-28T00:00:00", "status": "absent", "period": 1
+    })
+    assert absent.status_code == 201, absent.text
+    leave = client.post(f"/students/{student['id']}/attendance", headers=teacher_headers, json={
+        "attendance_date": "2026-10-28T00:00:00", "status": "leave", "period": 2
+    })
+    assert leave.status_code == 201, leave.text
+
+    progress = client.patch(f"/students/{student['id']}", headers=teacher_headers, json={
+        "completed_pages": 20, "current_juz": 2
+    })
+    assert progress.status_code == 200, progress.text
+
+    notifications = client.get("/parent/notifications", headers=parent_headers)
+    assert notifications.status_code == 200, notifications.text
+    rows = notifications.json()
+    types = {row["type"] for row in rows}
+    assert {"attendance", "progress", "juz"}.issubset(types)
+    assert len([row for row in rows if row["type"] == "attendance"]) == 2
+    assert any("20.0%" in row["message"] for row in rows if row["type"] == "progress")
+    assert any("Juz 2" in row["message"] for row in rows if row["type"] == "juz")
+
+    unread = next(row for row in rows if not row["read"])
+    marked = client.post(f"/parent/notifications/{unread['id']}/read", headers=parent_headers)
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["read"] is True
+
+
+def test_parent_cannot_read_another_parents_notifications(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    student = client.post("/students", headers=teacher_headers, json={
+        "student_code": "N-002", "name": "Private Notification Child"
+    }).json()
+    client.post("/parents", headers=teacher_headers, json={
+        "login_id": "notify_parent_a", "password": "Notify-Parent-Password-123!",
+        "student_ids": [student["id"]]
+    })
+    client.post("/parents", headers=teacher_headers, json={
+        "login_id": "notify_parent_b", "password": "Notify-Parent-Password-123!",
+        "student_ids": [student["id"]]
+    })
+    client.post(f"/students/{student['id']}/attendance", headers=teacher_headers, json={
+        "attendance_date": "2026-10-28T00:00:00", "status": "absent", "period": 1
+    })
+    token_b = login(client, "notify_parent_b", "Notify-Parent-Password-123!").json()["access_token"]
+    rows_b = client.get("/parent/notifications", headers=auth(token_b))
+    assert rows_b.status_code == 200
+    assert rows_b.json()
+    token_a = login(client, "notify_parent_a", "Notify-Parent-Password-123!").json()["access_token"]
+    rows_a = client.get("/parent/notifications", headers=auth(token_a))
+    assert rows_a.status_code == 200
+    assert len(rows_a.json()) == len(rows_b.json())
+    assert client.get("/parent/notifications", headers=teacher_headers).status_code == 403
