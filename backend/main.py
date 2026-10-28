@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import json
 import random
+import uuid
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
 from datetime import date, datetime, timedelta, timezone
@@ -223,6 +224,20 @@ class ChallengeSessionInput(BaseModel):
     questions: list[ChallengeQuestionInput] = Field(min_length=5, max_length=5)
     confirmed: bool = False
     score: int = Field(default=0, ge=0, le=100)
+
+class TeacherNotificationInput(BaseModel):
+    student_id: int | None = Field(default=None, gt=0)
+    title: str = Field(min_length=2, max_length=180)
+    message: str = Field(min_length=2, max_length=2000)
+
+    @field_validator("title", "message")
+    @classmethod
+    def notification_text_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Title and message cannot be blank")
+        return value
+
 
 class DisciplineInput(BaseModel):
     student_id: int = Field(gt=0)
@@ -728,6 +743,40 @@ def mark_parent_notification_read(notification_id: int, user: User = Depends(cur
         row.read_at = datetime.now(timezone.utc)
         db.commit()
     return {"id": row.id, "read": True}
+
+
+@app.post("/teacher/notifications", status_code=201)
+def create_teacher_notification(data: TeacherNotificationInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Send a manually composed in-app notification to parents of one student or all active students."""
+    if data.student_id is not None:
+        student = db.get(Student, data.student_id)
+        if student is None or not student.is_active:
+            raise HTTPException(status_code=404, detail="Active student not found")
+        students = [student]
+    else:
+        students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
+    if not students:
+        raise HTTPException(status_code=400, detail="No active students are available")
+
+    event_id = uuid.uuid4().hex
+    recipients = 0
+    students_notified = 0
+    for student in students:
+        parent_ids = set(db.scalars(select(ParentStudent.parent_user_id).where(
+            ParentStudent.student_id == student.id
+        )).all())
+        if not parent_ids:
+            continue
+        notify_student_parents(
+            db, student.id, f"manual:{event_id}:{student.id}",
+            data.title.strip(), data.message.strip(), "announcement"
+        )
+        recipients += len(parent_ids)
+        students_notified += 1
+    if recipients == 0:
+        raise HTTPException(status_code=400, detail="No parents are linked to the selected student(s)")
+    db.commit()
+    return {"sent": True, "recipients": recipients, "students_notified": students_notified}
 
 
 @app.post("/migration/localstorage")
