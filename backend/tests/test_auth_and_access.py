@@ -735,3 +735,41 @@ def test_parent_cannot_read_another_parents_notifications(client):
     assert rows_a.status_code == 200
     assert len(rows_a.json()) == len(rows_b.json())
     assert client.get("/parent/notifications", headers=teacher_headers).status_code == 403
+
+
+def test_teacher_can_send_manual_parent_notification_to_selected_student_and_all(client):
+    teacher_token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
+    teacher_headers = auth(teacher_token)
+    first = client.post("/students", headers=teacher_headers, json={
+        "student_code": "MAN-001", "name": "Manual Notice Child One"
+    }).json()
+    second = client.post("/students", headers=teacher_headers, json={
+        "student_code": "MAN-002", "name": "Manual Notice Child Two"
+    }).json()
+    for login_id, student_id in (("manual_parent_one", first["id"]), ("manual_parent_two", second["id"])):
+        created = client.post("/parents", headers=teacher_headers, json={
+            "login_id": login_id, "password": "Manual-Notice-Parent-123!", "student_ids": [student_id]
+        })
+        assert created.status_code == 201, created.text
+
+    selected = client.post("/teacher/notifications", headers=teacher_headers, json={
+        "student_id": first["id"], "title": "Class reminder", "message": "Please bring the workbook."
+    })
+    assert selected.status_code == 201, selected.text
+    parent_one = login(client, "manual_parent_one", "Manual-Notice-Parent-123!").json()["access_token"]
+    parent_two = login(client, "manual_parent_two", "Manual-Notice-Parent-123!").json()["access_token"]
+    rows_one = client.get("/parent/notifications", headers=auth(parent_one)).json()
+    rows_two = client.get("/parent/notifications", headers=auth(parent_two)).json()
+    assert any(row["title"] == "Class reminder" for row in rows_one)
+    assert not any(row["title"] == "Class reminder" for row in rows_two)
+
+    all_parents = client.post("/teacher/notifications", headers=teacher_headers, json={
+        "student_id": None, "title": "School announcement", "message": "Tomorrow's class starts at 9."
+    })
+    assert all_parents.status_code == 201, all_parents.text
+    assert all_parents.json()["recipients"] == 2
+    assert any(row["title"] == "School announcement" for row in client.get("/parent/notifications", headers=auth(parent_one)).json())
+    assert any(row["title"] == "School announcement" for row in client.get("/parent/notifications", headers=auth(parent_two)).json())
+    assert client.post("/teacher/notifications", headers=auth(parent_one), json={
+        "title": "Not allowed", "message": "Parents cannot send notifications."
+    }).status_code == 403
