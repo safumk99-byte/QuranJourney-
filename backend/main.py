@@ -60,6 +60,9 @@ class Student(Base):
     current_juz: Mapped[int] = mapped_column(Integer, default=1)
     journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cleanliness_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    discipline_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    worship_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     parent_links: Mapped[list["ParentStudent"]] = relationship(back_populates="student", cascade="all, delete-orphan")
@@ -364,6 +367,9 @@ class StudentUpdateInput(BaseModel):
     current_juz: int | None = Field(default=None, ge=1, le=30)
     journey_start_date: date | None = None
     photo_data: str | None = None
+    cleanliness_points: int | None = Field(default=None, ge=0, le=100000)
+    discipline_points: int | None = Field(default=None, ge=0, le=100000)
+    worship_points: int | None = Field(default=None, ge=0, le=100000)
 
     @field_validator("student_code", "name")
     @classmethod
@@ -629,6 +635,9 @@ def startup() -> None:
                 "current_juz": "INTEGER NOT NULL DEFAULT 1",
                 "journey_start_date": "DATE NULL",
                 "photo_data": "TEXT NULL",
+                "cleanliness_points": "INTEGER NOT NULL DEFAULT 0",
+                "discipline_points": "INTEGER NOT NULL DEFAULT 0",
+                "worship_points": "INTEGER NOT NULL DEFAULT 0",
                 "legacy_id": "VARCHAR(120) NULL",
             },
             "daily_marks": {
@@ -685,7 +694,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         if not ids:
             return []
         query = query.where(Student.id.in_(ids))
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data} for s in db.scalars(query.order_by(Student.name)).all()]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in db.scalars(query.order_by(Student.name)).all()]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -702,7 +711,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
             "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
-            "photo_data": student.photo_data}
+            "photo_data": student.photo_data, "cleanliness_points": student.cleanliness_points, "discipline_points": student.discipline_points, "worship_points": student.worship_points}
 
 @app.patch("/students/{student_id}")
 def update_student(student_id: int, data: StudentUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
