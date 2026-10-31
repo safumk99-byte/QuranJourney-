@@ -1256,9 +1256,11 @@ def _period_bounds(day: date, kind: str):
 def _target_period(student: Student, kind: str, today: date, holidays: list[CalendarHoliday], db: Session):
     start_date = student.journey_start_date or today
     target_date = start_date.replace(year=start_date.year + 3, day=min(start_date.day, 28) if start_date.month == 2 and start_date.day == 29 else start_date.day)
-    remaining = max(0.0, float(student.total_pages or 0) - float(student.completed_pages or 0))
-    days_left = max(1, (target_date - today).days)
-    daily_required = remaining / days_left if remaining else 0.0
+    # Fixed pace for the full three-year journey: new holiday entries must not
+    # change the daily baseline of already elapsed periods.
+    journey_days = max(1, (target_date - start_date).days + 1)
+    base_working_days = sum(1 for offset in range(journey_days) if (start_date + timedelta(days=offset)).weekday() != 4)
+    daily_required = float(student.total_pages or 0) / max(1, base_working_days)
     start, end = _period_bounds(today, kind)
     if end < start_date or start_date > today:
         return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
@@ -1275,7 +1277,7 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         last = min(pend, today)
         cutoff = datetime.combine(min(pend, today), datetime.max.time(), tzinfo=timezone.utc)
         effective_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= cutoff}
-        working_days = sum(1 for offset in range(max(0, (last - pstart).days + 1)) if (pstart + timedelta(days=offset)).weekday() != 4 and (pstart + timedelta(days=offset)) not in effective_holidays)
+        period_first = max(pstart, start_date)\n        working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
         base = daily_required * working_days
         page_values = db.scalars(select(ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= pstart, ReadingEntry.entry_date <= last)).all()
         actual = sum(reading_page_count(value) for value in page_values)
