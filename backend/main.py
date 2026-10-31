@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
+from sqlalchemy import UniqueConstraint, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -66,6 +66,17 @@ class Student(Base):
     legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     parent_links: Mapped[list["ParentStudent"]] = relationship(back_populates="student", cascade="all, delete-orphan")
+
+class MonthlyCharacterPoints(Base):
+    __tablename__ = "monthly_character_points"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    cleanliness_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    discipline_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    worship_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    __table_args__ = (UniqueConstraint("student_id", "year", "month", name="uq_monthly_character_student_month"),)
 
 class ParentStudent(Base):
     __tablename__ = "parent_students"
@@ -382,6 +393,13 @@ class StudentInput(BaseModel):
             return None
         value = value.strip()
         return value or None
+
+class MonthlyCharacterPointsInput(BaseModel):
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+    cleanliness_points: int = Field(default=0, ge=0, le=100000)
+    discipline_points: int = Field(default=0, ge=0, le=100000)
+    worship_points: int = Field(default=0, ge=0, le=100000)
 
 class StudentUpdateInput(BaseModel):
     student_code: str | None = Field(default=None, min_length=1, max_length=80)
@@ -1036,6 +1054,63 @@ def reverse_discipline_entry(entry_id: int, data: DisciplineReverseInput, user: 
     row.reversal_reason = data.reason
     db.commit()
     return {"id": row.id, "is_reversed": True, "reversal_reason": row.reversal_reason}
+
+@app.get("/students/{student_id}/character-points")
+def get_monthly_character_points(student_id: int, year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(current_user), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
+    row = db.scalar(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id == student_id, MonthlyCharacterPoints.year == year, MonthlyCharacterPoints.month == month))
+    return {"student_id": student_id, "year": year, "month": month, "cleanliness_points": row.cleanliness_points if row else 0, "discipline_points": row.discipline_points if row else 0, "worship_points": row.worship_points if row else 0}
+
+@app.put("/students/{student_id}/character-points")
+def save_monthly_character_points(student_id: int, data: MonthlyCharacterPointsInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
+    row = db.scalar(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id == student_id, MonthlyCharacterPoints.year == data.year, MonthlyCharacterPoints.month == data.month))
+    if row is None:
+        row = MonthlyCharacterPoints(student_id=student_id, year=data.year, month=data.month)
+        db.add(row)
+    row.cleanliness_points, row.discipline_points, row.worship_points = data.cleanliness_points, data.discipline_points, data.worship_points
+    db.commit()
+    return {"student_id": student_id, **data.model_dump()}
+
+@app.get("/points/monthly-ranking")
+def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    active = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
+    ids = {s.id for s in active}
+    totals = {sid: {"new_lesson_points": 0.0, "recent_revision_points": 0.0, "general_revision_points": 0.0} for sid in ids}
+    def numeric(value):
+        try: return max(0.0, float(value or 0))
+        except (TypeError, ValueError): return 0.0
+    for row in db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(ids or {-1}), ReadingEntry.entry_date >= start, ReadingEntry.entry_date < end)).all():
+        totals[row.student_id]["new_lesson_points"] += numeric(row.pages) * 10
+        totals[row.student_id]["recent_revision_points"] += numeric(row.recent_pages)
+        totals[row.student_id]["general_revision_points"] += numeric(row.general_pages)
+    chars = db.scalars(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id.in_(ids or {-1}), MonthlyCharacterPoints.year == year, MonthlyCharacterPoints.month == month)).all()
+    char_by_id = {r.student_id: r for r in chars}
+    deductions, exams = {}, {}
+    for row in db.scalars(select(DisciplineEntry).where(DisciplineEntry.student_id.in_(ids or {-1}), DisciplineEntry.incident_date >= start, DisciplineEntry.incident_date < end, DisciplineEntry.is_reversed.is_(False))).all():
+        deductions[row.student_id] = deductions.get(row.student_id, 0) + row.points_deducted
+    for row in db.scalars(select(ExamSession).where(ExamSession.student_id.in_(ids or {-1}), ExamSession.exam_date >= start, ExamSession.exam_date < end, ExamSession.confirmed.is_(True))).all():
+        exams[row.student_id] = exams.get(row.student_id, 0) + int(row.total_marks or 0)
+    results = []
+    for st in active:
+        c, a = char_by_id.get(st.id), totals[st.id]
+        ar = db.scalars(select(Attendance).where(Attendance.student_id == st.id, Attendance.attendance_date >= start, Attendance.attendance_date < end)).all()
+        by_day = {}
+        for x in ar: by_day.setdefault(x.attendance_date, []).append((x.status or "").lower())
+        if st.class_name:
+            work = set(db.scalars(select(Attendance.attendance_date).join(Student, Student.id == Attendance.student_id).where(Student.is_active.is_(True), Student.class_name == st.class_name, Attendance.attendance_date >= start, Attendance.attendance_date < end).distinct()).all())
+        else: work = set(by_day)
+        present = sum(1 for values in by_day.values() if values and all(v in {"present", "late"} for v in values))
+        attendance = round(present / len(work) * 10, 2) if work else 0.0
+        cp = {"cleanliness_points": c.cleanliness_points if c else 0, "discipline_points": c.discipline_points if c else 0, "worship_points": c.worship_points if c else 0}
+        deducted, exam = deductions.get(st.id, 0), exams.get(st.id, 0)
+        total = sum(a.values()) + sum(cp.values()) + attendance + exam - deducted
+        results.append({"student_id": st.id, "student_code": st.student_code, "name": st.name, "class_name": st.class_name or "Unassigned class", "month": f"{year:04d}-{month:02d}", **a, **cp, "attendance_points": attendance, "exam_points": exam, "discipline_points_deducted": deducted, "total_points": round(total, 2)})
+    results.sort(key=lambda x: (-x["total_points"], x["name"].casefold()))
+    for rank, item in enumerate(results, 1): item["rank"] = rank
+    return results
 
 @app.get("/points/leaderboard")
 def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
