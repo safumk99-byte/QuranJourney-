@@ -85,6 +85,25 @@ class ParentStudent(Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), index=True)
     student: Mapped[Student] = relationship(back_populates="parent_links")
 
+class CalendarHoliday(Base):
+    __tablename__ = "calendar_holidays"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    holiday_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    reason: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class CalendarHolidayInput(BaseModel):
+    holiday_date: date
+    reason: str | None = Field(default=None, max_length=240)
+
+    @field_validator("reason")
+    @classmethod
+    def clean_holiday_reason(cls, value):
+        return value.strip() or None if value is not None else None
+
+
 class ReadingEntry(Base):
     __tablename__ = "reading_entries"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -1179,6 +1198,103 @@ def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depe
     for rank, item in enumerate(result, start=1):
         item["rank"] = rank
     return result
+
+@app.get("/calendar/holidays")
+def list_calendar_holidays(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.scalars(select(CalendarHoliday).order_by(CalendarHoliday.holiday_date)).all()
+    return [{"id": r.id, "date": r.holiday_date.isoformat(), "reason": r.reason} for r in rows]
+
+
+@app.post("/calendar/holidays", status_code=201)
+def create_calendar_holiday(data: CalendarHolidayInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = CalendarHoliday(holiday_date=data.holiday_date, reason=data.reason)
+    db.add(row)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A holiday is already registered for this date")
+    db.refresh(row)
+    return {"id": row.id, "date": row.holiday_date.isoformat(), "reason": row.reason}
+
+
+@app.patch("/calendar/holidays/{holiday_id}")
+def update_calendar_holiday(holiday_id: int, data: CalendarHolidayInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.get(CalendarHoliday, holiday_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    row.holiday_date, row.reason = data.holiday_date, data.reason
+    row.updated_at = datetime.now(timezone.utc)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A holiday is already registered for this date")
+    return {"id": row.id, "date": row.holiday_date.isoformat(), "reason": row.reason}
+
+
+@app.delete("/calendar/holidays/{holiday_id}", status_code=204)
+def delete_calendar_holiday(holiday_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    row = db.get(CalendarHoliday, holiday_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Holiday not found")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
+
+def _period_bounds(day: date, kind: str):
+    if kind == "week":
+        start = day - timedelta(days=day.weekday())
+        return start, start + timedelta(days=6)
+    start = day.replace(day=1)
+    next_month = start.replace(day=28) + timedelta(days=4)
+    next_month = next_month.replace(day=1)
+    return start, next_month - timedelta(days=1)
+
+
+def _target_period(student: Student, kind: str, today: date, holidays: list[CalendarHoliday], db: Session):
+    start_date = student.journey_start_date or today
+    target_date = start_date.replace(year=start_date.year + 3, day=min(start_date.day, 28) if start_date.month == 2 and start_date.day == 29 else start_date.day)
+    remaining = max(0.0, float(student.total_pages or 0) - float(student.completed_pages or 0))
+    days_left = max(1, (target_date - today).days)
+    daily_required = remaining / days_left if remaining else 0.0
+    start, end = _period_bounds(today, kind)
+    if end < start_date or start_date > today:
+        return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
+    cursor = start_date - timedelta(days=start_date.weekday()) if kind == "week" else start_date.replace(day=1)
+    carry = 0.0
+    current = None
+    while cursor <= end:
+        if kind == "week":
+            pstart, pend, next_cursor = cursor, cursor + timedelta(days=6), cursor + timedelta(days=7)
+        else:
+            pstart = cursor
+            next_cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+            pend = next_cursor - timedelta(days=1)
+        last = min(pend, today)
+        cutoff = datetime.combine(min(pend, today), datetime.max.time(), tzinfo=timezone.utc)
+        effective_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= cutoff}
+        working_days = sum(1 for offset in range(max(0, (last - pstart).days + 1)) if (pstart + timedelta(days=offset)).weekday() != 4 and (pstart + timedelta(days=offset)) not in effective_holidays)
+        base = daily_required * working_days
+        page_values = db.scalars(select(ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= pstart, ReadingEntry.entry_date <= last)).all()
+        actual = sum(reading_page_count(value) for value in page_values)
+        required = base + carry
+        carry = max(0.0, required - actual)
+        if pstart == start:
+            current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(base, 2), "carry_in": round(required - base, 2), "target": round(required, 2), "completed": round(actual, 2), "remaining": round(carry, 2), "working_days": working_days, "status": "Met" if carry <= 0.001 else "Pending"}
+        cursor = next_cursor
+    return current
+
+
+@app.get("/targets/summary")
+def targets_summary(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    holidays = db.scalars(select(CalendarHoliday).order_by(CalendarHoliday.holiday_date)).all()
+    students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
+    allowed = allowed_student_ids(user, db)
+    return [{"student_id": s.id, "weekly": _target_period(s, "week", today, holidays, db), "monthly": _target_period(s, "month", today, holidays, db)} for s in students if allowed is None or s.id in allowed]
+
 
 @app.get("/students/{student_id}/reading")
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
