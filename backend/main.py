@@ -1265,6 +1265,10 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     if end < start_date or start_date > today:
         return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
     cursor = start_date - timedelta(days=start_date.weekday()) if kind == "week" else start_date.replace(day=1)
+    reading_rows = db.scalars(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= start_date, ReadingEntry.entry_date <= today)).all()
+    pages_by_date = {}
+    for entry_day, page_value in reading_rows:
+        pages_by_date[entry_day] = pages_by_date.get(entry_day, 0.0) + reading_page_count(page_value)
     carry = 0.0
     current = None
     while cursor <= end:
@@ -1277,10 +1281,10 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         last = min(pend, today)
         cutoff = datetime.combine(min(pend, today), datetime.max.time(), tzinfo=timezone.utc)
         effective_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= cutoff}
-        period_first = max(pstart, start_date)\n        working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
+        period_first = max(pstart, start_date)
+        working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
         base = daily_required * working_days
-        page_values = db.scalars(select(ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= pstart, ReadingEntry.entry_date <= last)).all()
-        actual = sum(reading_page_count(value) for value in page_values)
+        actual = sum(value for entry_day, value in pages_by_date.items() if period_first <= entry_day <= last)
         required = base + carry
         carry = max(0.0, required - actual)
         if pstart == start:
