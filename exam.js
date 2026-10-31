@@ -8,19 +8,19 @@ function msg(t,k=''){ $('message').innerHTML=t?'<div class="message '+k+'">'+esc
 const sid=()=> $('student').value;
 async function api(p,o={}){return A.api(p,o)}
 function setupType(){
- const monthly=type()==='monthly';
- $('monthField').hidden=!monthly;$('juzRangeField').hidden=monthly;
- $('rangesBtn').textContent=monthly?'Load Monthly New Lessons':'Validate Selected Juz Range';
+ const t=type(),monthly=t==='monthly',single=t==='juz',semester=t==='semester';
+ $('monthField').hidden=!monthly;$('singleJuzField').hidden=!single;$('semesterRangeField').hidden=!semester;
+ $('rangesBtn').textContent=monthly?'Load Monthly New Lessons':single?'Check Selected Juz':'Check Semester Juz Range';
  $('month').required=monthly;
 }
 function initJuz(){
- for(const id of ['startJuz','endJuz'])$(id).innerHTML=Array.from({length:30},(_,i)=>'<option value="'+(i+1)+'">Juz '+(i+1)+'</option>').join('');
- $('startJuz').value='1';$('endJuz').value='5';
+ for(const id of ['singleJuz','startJuz','endJuz'])$(id).innerHTML=Array.from({length:30},(_,i)=>'<option value="'+(i+1)+'">Juz '+(i+1)+'</option>').join('');
+ $('singleJuz').value='1';$('startJuz').value='1';$('endJuz').value='5';
 }
 async function students(){try{let a=await api('/students');$('student').innerHTML='<option value="">Select student</option>'+a.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' · '+esc(s.class_name||'No class')+'</option>').join('')}catch(e){msg(e.message||'Cannot load students','error')}}
 function renderQ(){ $('questions').innerHTML=qs.map((q,i)=>'<article class="q"><b>Question '+(i+1)+'</b><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><p class="muted">'+esc(q.expected||'')+'</p><div class="grid"><label>Maximum marks<input type="number" min="1" max="1000" data-max="'+i+'" value="'+(q.max_marks||5)+'"></label><label>Marks awarded<input type="number" min="0" max="'+(q.max_marks||5)+'" data-award="'+i+'" value="'+(q.awarded_marks??'')+'" placeholder="Teacher marks"></label></div><label>Teacher note<textarea data-note="'+i+'" rows="2">'+esc(q.note||'')+'</textarea></label></article>').join('')}
 function readQ(){qs=qs.map((q,i)=>({...q,max_marks:Number($('[data-max="'+i+'"]').value),awarded_marks:$('[data-award="'+i+'"]').value===''?null:Number($('[data-award="'+i+'"]').value),note:$('[data-note="'+i+'"]').value.trim()}))}
-function selectedRange(){return {start_juz:Number($('startJuz').value),end_juz:Number($('endJuz').value)}}
+function selectedRange(){return type()==='juz'?{juz_no:Number($('singleJuz').value)}:{start_juz:Number($('startJuz').value),end_juz:Number($('endJuz').value)}}
 async function loadRanges(){
  if(!sid())return msg('Select a student first.','error');
  if(type()==='monthly'){
@@ -30,9 +30,10 @@ async function loadRanges(){
    $('ranges').innerHTML=ranges.length?ranges.map(r=>'<div class="range"><b>'+esc(r.date)+'</b> · Surah '+r.start_surah+':'+r.start_ayah+' – '+r.end_surah+':'+r.end_ayah+' · '+esc(r.pages)+' pages</div>').join(''):'ഈ മാസത്തിൽ New Lesson രേഖകളൊന്നും കണ്ടെത്തിയില്ല.';
   }catch(e){msg(e.message||'Cannot load monthly New Lessons','error')}
  }else{
-  const {start_juz,end_juz}=selectedRange();
-  if(end_juz<start_juz)return msg('End Juz must be greater than or equal to Start Juz.','error');
-  $('ranges').innerHTML='<div class="range">'+(type()==='semester'?'Semester':'Juz Completion')+' Exam: Juz '+start_juz+' – '+end_juz+'<br><span class="muted">Generation സമയത്ത് ഈ പരിധി വിദ്യാർത്ഥിയുടെ Saved Learning Range-ൽ ഉണ്ടെന്ന് പരിശോധിക്കും.</span></div>';
+  const scope=selectedRange();
+  if(type()==='semester'&&scope.end_juz<scope.start_juz)return msg('End Juz must be greater than or equal to Start Juz.','error');
+  const label=type()==='juz'?'Juz '+scope.juz_no:'Juz '+scope.start_juz+' – '+scope.end_juz;
+  $('ranges').innerHTML='<div class="range">'+(type()==='semester'?'Semester':'Juz Completion')+' Exam: '+label+'<br><span class="muted">Generation സമയത്ത് ഈ പരിധി വിദ്യാർത്ഥിയുടെ Saved Learning Range-ൽ ഉണ്ടെന്ന് പരിശോധിക്കും.</span></div>';
  }
 }
 async function generate(){
@@ -73,7 +74,7 @@ async function historyLoad(){
 $('history').addEventListener('click',e=>{
  let b=e.target.closest('[data-load]');if(!b)return;let h=hist[Number(b.dataset.load)];
  $('date').value=h.date;$('confirm').value=String(h.confirmed);$('examType').value=h.exam_type||'monthly';setupType();
- if(h.start_juz){$('startJuz').value=String(h.start_juz);$('endJuz').value=String(h.end_juz)}
+ if(h.start_juz){if(type()==='juz')$('singleJuz').value=String(h.start_juz);else{$('startJuz').value=String(h.start_juz);$('endJuz').value=String(h.end_juz)}}
  if(type()==='monthly')$('month').value=h.date.slice(0,7);
  qs=h.questions.map(q=>({...q}));renderQ();msg(h.confirmed?'Confirmed exam loaded for review; server will prevent edits.':'Draft loaded.','success');
 });

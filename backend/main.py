@@ -258,6 +258,7 @@ class ExamGenerateInput(BaseModel):
     exam_type: str = Field(default="monthly", pattern="^(monthly|juz|semester)$")
     year: int | None = Field(default=None, ge=2000, le=2100)
     month: int | None = Field(default=None, ge=1, le=12)
+    juz_no: int | None = Field(default=None, ge=1, le=30)
     start_juz: int | None = Field(default=None, ge=1, le=30)
     end_juz: int | None = Field(default=None, ge=1, le=30)
     question_count: int = Field(ge=1, le=100)
@@ -267,9 +268,11 @@ class ExamGenerateInput(BaseModel):
         if self.exam_type == "monthly":
             if self.year is None or self.month is None:
                 raise ValueError("Monthly Exam requires year and month.")
-        else:
-            if self.start_juz is None or self.end_juz is None or self.end_juz < self.start_juz:
-                raise ValueError("Select a valid Juz range for this exam.")
+        elif self.exam_type == "juz":
+            if self.juz_no is None:
+                raise ValueError("Select one Juz for Juz Completion Exam.")
+        elif self.start_juz is None or self.end_juz is None or self.end_juz < self.start_juz:
+            raise ValueError("Select a valid Juz range for Semester Exam.")
         return self
 
 class ExamQuestionInput(BaseModel):
@@ -288,6 +291,7 @@ class ExamQuestionInput(BaseModel):
 class ExamSaveInput(BaseModel):
     date: date
     exam_type: str = Field(default="monthly", pattern="^(monthly|juz|semester)$")
+    juz_no: int | None = Field(default=None, ge=1, le=30)
     start_juz: int | None = Field(default=None, ge=1, le=30)
     end_juz: int | None = Field(default=None, ge=1, le=30)
     confirmed: bool = False
@@ -1418,7 +1422,9 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
         if not refs_by_key:
             raise HTTPException(status_code=400, detail="The selected month has no valid New Lesson ayahs to use.")
     else:
-        juz_numbers = list(range(data.start_juz, data.end_juz + 1))
+        start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
+        end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
+        juz_numbers = list(range(start_juz, end_juz + 1))
         saved_ranges = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id)).all()
         saved_juz = {j for r in saved_ranges if r.start_juz and r.end_juz for j in range(r.start_juz, r.end_juz + 1)}
         missing = [j for j in juz_numbers if j not in saved_juz]
@@ -1441,12 +1447,13 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
         row.total_marks = 0
     else:
         row = ExamSession(student_id=student_id, exam_date=data.date, exam_type=data.exam_type,
-                          start_juz=data.start_juz, end_juz=data.end_juz, confirmed=False, total_marks=0)
+                          start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz),
+                          end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz), confirmed=False, total_marks=0)
         db.add(row)
         db.flush()
     row.exam_type = data.exam_type
-    row.start_juz = data.start_juz
-    row.end_juz = data.end_juz
+    row.start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
+    row.end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
     for idx, (ref, scope_label) in enumerate(chosen, start=1):
         row.questions.append(ExamQuestion(
             question_no=idx, question_text=ref["text"],
@@ -1464,14 +1471,14 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
         raise HTTPException(status_code=422, detail="Exam date does not match URL")
     row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date, ExamSession.exam_type == data.exam_type).order_by(ExamSession.id.desc()))
     if row is None:
-        row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=data.start_juz, end_juz=data.end_juz)
+        row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz), end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz))
         db.add(row)
         db.flush()
     if row.confirmed:
         raise HTTPException(status_code=409, detail="Confirmed exam marks cannot be edited.")
     row.exam_type = data.exam_type
-    row.start_juz = data.start_juz
-    row.end_juz = data.end_juz
+    row.start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
+    row.end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
     row.questions.clear()
     db.flush()
     total = 0
