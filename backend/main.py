@@ -1119,13 +1119,13 @@ def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Que
             work = set(by_day)
         present = sum(1 for values in by_day.values() if values and all(v in {"present", "late"} for v in values))
         attendance = round(present / len(work) * 10, 2) if work else 0.0
-        behaviour = c.cleanliness_points if c else 0
-        conduct = c.discipline_points if c else 0
-        ibadath = c.worship_points if c else 0
+        cleanliness = c.cleanliness_points if c else 0
+        discipline = c.discipline_points if c else 0
+        worship = c.worship_points if c else 0
         hifz = round(hifz_points.get(st.id, 0), 2)
         pareeksha = exams.get(st.id, 0)
-        total = behaviour + conduct + attendance + ibadath + hifz + pareeksha
-        results.append({"student_id": st.id, "student_code": st.student_code, "name": st.name, "class_name": st.class_name or "Unassigned class", "month": f"{year:04d}-{month:02d}", "behaviour": behaviour, "conduct": conduct, "attendance": attendance, "ibadath": ibadath, "hifz": hifz, "pareeksha": pareeksha, "total_points": round(total, 2)})
+        total = cleanliness + discipline + attendance + worship + hifz + pareeksha
+        results.append({"student_id": st.id, "student_code": st.student_code, "name": st.name, "class_name": st.class_name or "Unassigned class", "month": f"{year:04d}-{month:02d}", "cleanliness_points": cleanliness, "discipline_points": discipline, "attendance_points": attendance, "worship_points": worship, "hifz": hifz, "pareeksha": pareeksha, "total_points": round(total, 2)})
     results.sort(key=lambda x: (-x["total_points"], x["name"].casefold()))
     for rank, item in enumerate(results, 1):
         item["rank"] = rank
