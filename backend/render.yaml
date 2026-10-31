@@ -18,4 +18,4 @@ services:
       - key: CORS_ORIGINS
         value: https://safumk99-byte.github.io
       - key: ACCESS_TOKEN_MINUTES
-        value: "60"
+        value: "43200"
