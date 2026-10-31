@@ -197,6 +197,9 @@ class ExamSession(Base):
     exam_date: Mapped[date] = mapped_column(Date, index=True)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     total_marks: Mapped[int] = mapped_column(Integer, default=0)
+    exam_type: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
+    start_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     questions: Mapped[list["ExamQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="ExamQuestion.question_no")
 
@@ -252,9 +255,22 @@ class ChallengeSessionInput(BaseModel):
 
 class ExamGenerateInput(BaseModel):
     date: date
-    year: int = Field(ge=2000, le=2100)
-    month: int = Field(ge=1, le=12)
+    exam_type: str = Field(default="monthly", pattern="^(monthly|juz|semester)$")
+    year: int | None = Field(default=None, ge=2000, le=2100)
+    month: int | None = Field(default=None, ge=1, le=12)
+    start_juz: int | None = Field(default=None, ge=1, le=30)
+    end_juz: int | None = Field(default=None, ge=1, le=30)
     question_count: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def validate_exam_scope(self):
+        if self.exam_type == "monthly":
+            if self.year is None or self.month is None:
+                raise ValueError("Monthly Exam requires year and month.")
+        else:
+            if self.start_juz is None or self.end_juz is None or self.end_juz < self.start_juz:
+                raise ValueError("Select a valid Juz range for this exam.")
+        return self
 
 class ExamQuestionInput(BaseModel):
     text: str = Field(min_length=1, max_length=3000)
@@ -271,6 +287,9 @@ class ExamQuestionInput(BaseModel):
 
 class ExamSaveInput(BaseModel):
     date: date
+    exam_type: str = Field(default="monthly", pattern="^(monthly|juz|semester)$")
+    start_juz: int | None = Field(default=None, ge=1, le=30)
+    end_juz: int | None = Field(default=None, ge=1, le=30)
     confirmed: bool = False
     questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
 
@@ -650,6 +669,7 @@ def startup() -> None:
             },
             "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL", "new_lesson": "TEXT NULL", "pages": "VARCHAR(200) NULL", "recent_revision": "TEXT NULL", "general_revision": "TEXT NULL", "remarks": "TEXT NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL", "period": "INTEGER NOT NULL DEFAULT 1"},
+            "exam_sessions": {"exam_type": "VARCHAR(20) NOT NULL DEFAULT 'monthly'", "start_juz": "INTEGER NULL", "end_juz": "INTEGER NULL"},
         }
         with engine.begin() as conn:
             for table, columns in additive.items():
@@ -1314,8 +1334,9 @@ def delete_challenge_range(student_id: int, range_id: int, user: User = Depends(
 
 def _exam_json(row: ExamSession):
     return {
-        "id": row.id, "date": row.exam_date.isoformat(), "confirmed": row.confirmed,
-        "total_marks": row.total_marks,
+        "id": row.id, "date": row.exam_date.isoformat(), "exam_type": row.exam_type or "monthly",
+        "start_juz": row.start_juz, "end_juz": row.end_juz,
+        "confirmed": row.confirmed, "total_marks": row.total_marks,
         "questions": [{
             "text": q.question_text, "expected": q.expected_answer or "",
             "max_marks": q.max_marks, "awarded_marks": q.awarded_marks,
@@ -1360,38 +1381,58 @@ def exam_sessions(student_id: int, user: User = Depends(current_user), db: Sessi
 @app.post("/students/{student_id}/exam/generate")
 def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
-    if data.date.year != data.year or data.date.month != data.month:
-        raise HTTPException(status_code=422, detail="Exam date must be within the selected Monthly Exam month.")
-    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == data.date).order_by(ExamSession.id.desc()))
+    if data.exam_type == "monthly":
+        if data.date.year != data.year or data.date.month != data.month:
+            raise HTTPException(status_code=422, detail="Exam date must be within the selected Monthly Exam month.")
+    row = db.scalar(select(ExamSession).where(
+        ExamSession.student_id == student_id,
+        ExamSession.exam_date == data.date,
+        ExamSession.exam_type == data.exam_type,
+    ).order_by(ExamSession.id.desc()))
     if row and row.confirmed:
         raise HTTPException(status_code=409, detail="This exam is confirmed. Create a new exam date to generate another.")
-    month_start = date(data.year, data.month, 1)
-    month_end = date(data.year + 1, 1, 1) if data.month == 12 else date(data.year, data.month + 1, 1)
-    lessons = db.scalars(select(ReadingEntry).where(
-        ReadingEntry.student_id == student_id,
-        ReadingEntry.entry_date >= month_start,
-        ReadingEntry.entry_date < month_end,
-        ReadingEntry.start_surah.is_not(None),
-        ReadingEntry.start_ayah.is_not(None),
-        ReadingEntry.end_surah.is_not(None),
-        ReadingEntry.end_ayah.is_not(None),
-    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
-    if not lessons:
-        raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
+
     refs_by_key = {}
-    for lesson in lessons:
-        first = (lesson.start_surah, lesson.start_ayah)
-        last = (lesson.end_surah, lesson.end_ayah)
-        for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
-            for ref in _surah_ayah_refs(surah_no):
-                key = (ref["surah"], ref["ayah"])
-                if first <= key <= last:
-                    refs_by_key[key] = (ref, lesson.entry_date)
+    if data.exam_type == "monthly":
+        month_start = date(data.year, data.month, 1)
+        month_end = date(data.year + 1, 1, 1) if data.month == 12 else date(data.year, data.month + 1, 1)
+        lessons = db.scalars(select(ReadingEntry).where(
+            ReadingEntry.student_id == student_id,
+            ReadingEntry.entry_date >= month_start,
+            ReadingEntry.entry_date < month_end,
+            ReadingEntry.start_surah.is_not(None),
+            ReadingEntry.start_ayah.is_not(None),
+            ReadingEntry.end_surah.is_not(None),
+            ReadingEntry.end_ayah.is_not(None),
+        ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+        if not lessons:
+            raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
+        for lesson in lessons:
+            first = (lesson.start_surah, lesson.start_ayah)
+            last = (lesson.end_surah, lesson.end_ayah)
+            for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
+                for ref in _surah_ayah_refs(surah_no):
+                    key = (ref["surah"], ref["ayah"])
+                    if first <= key <= last:
+                        refs_by_key[key] = (ref, f"New Lesson {lesson.entry_date.isoformat()}")
+        if not refs_by_key:
+            raise HTTPException(status_code=400, detail="The selected month has no valid New Lesson ayahs to use.")
+    else:
+        juz_numbers = list(range(data.start_juz, data.end_juz + 1))
+        saved_ranges = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id)).all()
+        saved_juz = {j for r in saved_ranges if r.start_juz and r.end_juz for j in range(r.start_juz, r.end_juz + 1)}
+        missing = [j for j in juz_numbers if j not in saved_juz]
+        if missing:
+            raise HTTPException(status_code=400, detail="Selected Juz range is not present in the student's saved Learning Range: " + ", ".join(map(str, missing)))
+        for juz_no in juz_numbers:
+            for ref in _juz_ayah_refs(juz_no):
+                refs_by_key[(ref["surah"], ref["ayah"])] = (ref, f"Juz {juz_no}")
+        if not refs_by_key:
+            raise HTTPException(status_code=400, detail="No ayahs found in the selected Juz range.")
+
     refs = list(refs_by_key.values())
-    if not refs:
-        raise HTTPException(status_code=400, detail="The selected month has no valid New Lesson ayahs to use.")
     if len(refs) < data.question_count:
-        raise HTTPException(status_code=400, detail=f"Only {len(refs)} unique New Lesson ayahs were recorded this month. Reduce the question count to {len(refs)} or fewer.")
+        raise HTTPException(status_code=400, detail=f"Only {len(refs)} unique ayahs are available in the selected range. Reduce the question count to {len(refs)} or fewer.")
     chosen = random.SystemRandom().sample(refs, data.question_count)
     if row:
         row.questions.clear()
@@ -1399,13 +1440,17 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
         row.confirmed = False
         row.total_marks = 0
     else:
-        row = ExamSession(student_id=student_id, exam_date=data.date, confirmed=False, total_marks=0)
+        row = ExamSession(student_id=student_id, exam_date=data.date, exam_type=data.exam_type,
+                          start_juz=data.start_juz, end_juz=data.end_juz, confirmed=False, total_marks=0)
         db.add(row)
         db.flush()
-    for idx, (ref, lesson_date) in enumerate(chosen, start=1):
+    row.exam_type = data.exam_type
+    row.start_juz = data.start_juz
+    row.end_juz = data.end_juz
+    for idx, (ref, scope_label) in enumerate(chosen, start=1):
         row.questions.append(ExamQuestion(
             question_no=idx, question_text=ref["text"],
-            expected_answer=f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} · New Lesson {lesson_date.isoformat()}",
+            expected_answer=f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} · {scope_label}",
             max_marks=5
         ))
     db.commit()
@@ -1417,13 +1462,16 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
     _challenge_student(student_id, user, db)
     if data.date != exam_date:
         raise HTTPException(status_code=422, detail="Exam date does not match URL")
-    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date).order_by(ExamSession.id.desc()))
+    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date, ExamSession.exam_type == data.exam_type).order_by(ExamSession.id.desc()))
     if row is None:
-        row = ExamSession(student_id=student_id, exam_date=exam_date)
+        row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=data.start_juz, end_juz=data.end_juz)
         db.add(row)
         db.flush()
     if row.confirmed:
         raise HTTPException(status_code=409, detail="Confirmed exam marks cannot be edited.")
+    row.exam_type = data.exam_type
+    row.start_juz = data.start_juz
+    row.end_juz = data.end_juz
     row.questions.clear()
     db.flush()
     total = 0
