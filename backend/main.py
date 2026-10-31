@@ -1095,39 +1095,42 @@ def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Que
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
     active = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
     ids = {s.id for s in active}
-    totals = {sid: {"new_lesson_points": 0.0, "recent_revision_points": 0.0, "general_revision_points": 0.0} for sid in ids}
-    def numeric(value):
-        try: return max(0.0, float(value or 0))
-        except (TypeError, ValueError): return 0.0
+    hifz_points = {sid: 0.0 for sid in ids}
     for row in db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(ids or {-1}), ReadingEntry.entry_date >= start, ReadingEntry.entry_date < end)).all():
-        totals[row.student_id]["new_lesson_points"] += numeric(row.pages) * 10
-        totals[row.student_id]["recent_revision_points"] += numeric(row.recent_pages)
-        totals[row.student_id]["general_revision_points"] += numeric(row.general_pages)
+        try:
+            hifz_points[row.student_id] += max(0.0, float(row.pages or 0)) * 10
+        except (TypeError, ValueError):
+            continue
     chars = db.scalars(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id.in_(ids or {-1}), MonthlyCharacterPoints.year == year, MonthlyCharacterPoints.month == month)).all()
     char_by_id = {r.student_id: r for r in chars}
-    deductions, exams = {}, {}
-    for row in db.scalars(select(DisciplineEntry).where(DisciplineEntry.student_id.in_(ids or {-1}), DisciplineEntry.incident_date >= start, DisciplineEntry.incident_date < end, DisciplineEntry.is_reversed.is_(False))).all():
-        deductions[row.student_id] = deductions.get(row.student_id, 0) + row.points_deducted
+    exams = {}
     for row in db.scalars(select(ExamSession).where(ExamSession.student_id.in_(ids or {-1}), ExamSession.exam_date >= start, ExamSession.exam_date < end, ExamSession.confirmed.is_(True))).all():
         exams[row.student_id] = exams.get(row.student_id, 0) + int(row.total_marks or 0)
     results = []
     for st in active:
-        c, a = char_by_id.get(st.id), totals[st.id]
+        c = char_by_id.get(st.id)
         ar = db.scalars(select(Attendance).where(Attendance.student_id == st.id, Attendance.attendance_date >= start, Attendance.attendance_date < end)).all()
         by_day = {}
-        for x in ar: by_day.setdefault(x.attendance_date, []).append((x.status or "").lower())
+        for x in ar:
+            by_day.setdefault(x.attendance_date, []).append((x.status or "").lower())
         if st.class_name:
             work = set(db.scalars(select(Attendance.attendance_date).join(Student, Student.id == Attendance.student_id).where(Student.is_active.is_(True), Student.class_name == st.class_name, Attendance.attendance_date >= start, Attendance.attendance_date < end).distinct()).all())
-        else: work = set(by_day)
+        else:
+            work = set(by_day)
         present = sum(1 for values in by_day.values() if values and all(v in {"present", "late"} for v in values))
         attendance = round(present / len(work) * 10, 2) if work else 0.0
-        cp = {"cleanliness_points": c.cleanliness_points if c else 0, "discipline_points": c.discipline_points if c else 0, "worship_points": c.worship_points if c else 0}
-        deducted, exam = deductions.get(st.id, 0), exams.get(st.id, 0)
-        total = sum(a.values()) + sum(cp.values()) + attendance + exam - deducted
-        results.append({"student_id": st.id, "student_code": st.student_code, "name": st.name, "class_name": st.class_name or "Unassigned class", "month": f"{year:04d}-{month:02d}", **a, **cp, "attendance_points": attendance, "exam_points": exam, "discipline_points_deducted": deducted, "total_points": round(total, 2)})
+        behaviour = c.cleanliness_points if c else 0
+        conduct = c.discipline_points if c else 0
+        ibadath = c.worship_points if c else 0
+        hifz = round(hifz_points.get(st.id, 0), 2)
+        pareeksha = exams.get(st.id, 0)
+        total = behaviour + conduct + attendance + ibadath + hifz + pareeksha
+        results.append({"student_id": st.id, "student_code": st.student_code, "name": st.name, "class_name": st.class_name or "Unassigned class", "month": f"{year:04d}-{month:02d}", "behaviour": behaviour, "conduct": conduct, "attendance": attendance, "ibadath": ibadath, "hifz": hifz, "pareeksha": pareeksha, "total_points": round(total, 2)})
     results.sort(key=lambda x: (-x["total_points"], x["name"].casefold()))
-    for rank, item in enumerate(results, 1): item["rank"] = rank
+    for rank, item in enumerate(results, 1):
+        item["rank"] = rank
     return results
+
 
 @app.get("/points/leaderboard")
 def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
