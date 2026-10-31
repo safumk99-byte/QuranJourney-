@@ -1095,12 +1095,22 @@ def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Que
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
     active = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
     ids = {s.id for s in active}
-    hifz_points = {sid: 0.0 for sid in ids}
-    for row in db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(ids or {-1}), ReadingEntry.entry_date >= start, ReadingEntry.entry_date < end)).all():
-        try:
-            hifz_points[row.student_id] += max(0.0, float(row.pages or 0)) * 10
-        except (TypeError, ValueError):
-            continue
+    # Hifz is based on monthly Progress remarks containing "thamam".
+    # Normalize each student's monthly count against the highest count in this month.
+    thamam_counts = {sid: 0 for sid in ids}
+    progress_rows = db.scalars(select(ReadingEntry).where(
+        ReadingEntry.student_id.in_(ids or {-1}),
+        ReadingEntry.entry_date >= start,
+        ReadingEntry.entry_date < end,
+    )).all()
+    for row in progress_rows:
+        if "thamam" in (row.remarks or "").casefold():
+            thamam_counts[row.student_id] += 1
+    max_thamam = max(thamam_counts.values(), default=0)
+    hifz_points = {
+        sid: round((count / max_thamam) * 10, 2) if max_thamam else 0.0
+        for sid, count in thamam_counts.items()
+    }
     chars = db.scalars(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id.in_(ids or {-1}), MonthlyCharacterPoints.year == year, MonthlyCharacterPoints.month == month)).all()
     char_by_id = {r.student_id: r for r in chars}
     exams = {}
