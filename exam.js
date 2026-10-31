@@ -9,7 +9,10 @@ const sid=()=> $('student').value;
 async function api(p,o={}){return A.api(p,o)}
 function setupType(){
  const t=type(),monthly=t==='monthly',single=t==='juz',semester=t==='semester';
- $('monthField').hidden=!monthly;$('singleJuzField').hidden=!single;$('semesterRangeField').hidden=!semester;
+ const setVisible=(id,visible)=>{const el=$(id);el.hidden=!visible;el.style.display=visible?'':'none'};
+ setVisible('monthField',monthly);
+ setVisible('singleJuzField',single);
+ setVisible('semesterRangeField',semester);
  $('rangesBtn').textContent=monthly?'Load Monthly New Lessons':single?'Check Selected Juz':'Check Semester Juz Range';
  $('month').required=monthly;
 }
