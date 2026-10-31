@@ -252,6 +252,8 @@ class ChallengeSessionInput(BaseModel):
 
 class ExamGenerateInput(BaseModel):
     date: date
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
     question_count: int = Field(ge=1, le=100)
 
 class ExamQuestionInput(BaseModel):
@@ -1321,11 +1323,33 @@ def _exam_json(row: ExamSession):
         } for q in row.questions]
     }
 
-@app.get("/students/{student_id}/exam/ranges")
-def exam_learning_ranges(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+@app.get("/students/{student_id}/exam/monthly-learning")
+def exam_monthly_learning(
+    student_id: int,
+    year: int = Query(ge=2000, le=2100),
+    month: int = Query(ge=1, le=12),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Return only New Lesson ranges entered for the selected calendar month."""
     _challenge_student(student_id, user, db)
-    rows = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id).order_by(ChallengeRange.id)).all()
-    return [{"id": r.id, "start_juz": r.start_juz, "end_juz": r.end_juz, "status": r.status, "note": r.note or ""} for r in rows]
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+    rows = db.scalars(select(ReadingEntry).where(
+        ReadingEntry.student_id == student_id,
+        ReadingEntry.entry_date >= start,
+        ReadingEntry.entry_date < end,
+        ReadingEntry.start_surah.is_not(None),
+        ReadingEntry.start_ayah.is_not(None),
+        ReadingEntry.end_surah.is_not(None),
+        ReadingEntry.end_ayah.is_not(None),
+    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+    return [{
+        "id": row.id, "date": row.entry_date.isoformat(),
+        "start_surah": row.start_surah, "start_ayah": row.start_ayah,
+        "end_surah": row.end_surah, "end_ayah": row.end_ayah,
+        "pages": row.pages or "0", "new_lesson": row.new_lesson or "",
+    } for row in rows]
 
 @app.get("/students/{student_id}/exam/sessions")
 def exam_sessions(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -1336,20 +1360,38 @@ def exam_sessions(student_id: int, user: User = Depends(current_user), db: Sessi
 @app.post("/students/{student_id}/exam/generate")
 def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
+    if data.date.year != data.year or data.date.month != data.month:
+        raise HTTPException(status_code=422, detail="Exam date must be within the selected Monthly Exam month.")
     row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == data.date).order_by(ExamSession.id.desc()))
     if row and row.confirmed:
         raise HTTPException(status_code=409, detail="This exam is confirmed. Create a new exam date to generate another.")
-    ranges = db.scalars(select(ChallengeRange).where(ChallengeRange.student_id == student_id)).all()
-    juz_numbers = sorted({j for r in ranges if r.start_juz and r.end_juz and r.status in ("Learning", "Completed") for j in range(r.start_juz, r.end_juz + 1)})
-    if not juz_numbers:
-        raise HTTPException(status_code=400, detail="Save the student's learning range in the Challenge section first.")
+    month_start = date(data.year, data.month, 1)
+    month_end = date(data.year + 1, 1, 1) if data.month == 12 else date(data.year, data.month + 1, 1)
+    lessons = db.scalars(select(ReadingEntry).where(
+        ReadingEntry.student_id == student_id,
+        ReadingEntry.entry_date >= month_start,
+        ReadingEntry.entry_date < month_end,
+        ReadingEntry.start_surah.is_not(None),
+        ReadingEntry.start_ayah.is_not(None),
+        ReadingEntry.end_surah.is_not(None),
+        ReadingEntry.end_ayah.is_not(None),
+    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+    if not lessons:
+        raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
     refs_by_key = {}
-    for juz_no in juz_numbers:
-        for ref in _juz_ayah_refs(juz_no):
-            refs_by_key[(ref["surah"], ref["ayah"])] = (ref, juz_no)
+    for lesson in lessons:
+        first = (lesson.start_surah, lesson.start_ayah)
+        last = (lesson.end_surah, lesson.end_ayah)
+        for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
+            for ref in _surah_ayah_refs(surah_no):
+                key = (ref["surah"], ref["ayah"])
+                if first <= key <= last:
+                    refs_by_key[key] = (ref, lesson.entry_date)
     refs = list(refs_by_key.values())
+    if not refs:
+        raise HTTPException(status_code=400, detail="The selected month has no valid New Lesson ayahs to use.")
     if len(refs) < data.question_count:
-        raise HTTPException(status_code=400, detail=f"Only {len(refs)} ayahs are available in the saved learning range.")
+        raise HTTPException(status_code=400, detail=f"Only {len(refs)} unique New Lesson ayahs were recorded this month. Reduce the question count to {len(refs)} or fewer.")
     chosen = random.SystemRandom().sample(refs, data.question_count)
     if row:
         row.questions.clear()
@@ -1360,10 +1402,10 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
         row = ExamSession(student_id=student_id, exam_date=data.date, confirmed=False, total_marks=0)
         db.add(row)
         db.flush()
-    for idx, (ref, juz_no) in enumerate(chosen, start=1):
+    for idx, (ref, lesson_date) in enumerate(chosen, start=1):
         row.questions.append(ExamQuestion(
             question_no=idx, question_text=ref["text"],
-            expected_answer=f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} (Juz {juz_no})",
+            expected_answer=f"Surah {ref['surah']}: {ref['surah_name']} {ref['ayah']} · New Lesson {lesson_date.isoformat()}",
             max_marks=5
         ))
     db.commit()
@@ -1399,6 +1441,27 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
     db.commit()
     db.refresh(row)
     return _exam_json(row)
+
+_SURAH_AYAH_CACHE: dict[int, list[dict]] = {}
+
+def _surah_ayah_refs(surah_no: int) -> list[dict]:
+    """Fetch verified Arabic ayah text and references for one Surah."""
+    if surah_no not in _SURAH_AYAH_CACHE:
+        try:
+            with urlopen(f"https://api.alquran.cloud/v1/surah/{surah_no}/quran-uthmani", timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if payload.get("code") != 200 or not isinstance(payload.get("data", {}).get("ayahs"), list):
+                raise ValueError("Unexpected Quran API response")
+            surah = payload["data"]
+            _SURAH_AYAH_CACHE[surah_no] = [
+                {"surah": int(surah_no), "surah_name": str(surah.get("englishName", "")),
+                 "ayah": int(a["numberInSurah"]), "text": str(a["text"]).strip()}
+                for a in surah["ayahs"] if a.get("numberInSurah") and a.get("text")
+            ]
+        except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=502, detail=f"Could not load verified Quran data for Surah {surah_no}. Please retry.") from exc
+    return _SURAH_AYAH_CACHE[surah_no]
+
 
 _JUZ_AYAH_CACHE: dict[int, list[dict]] = {}
 
