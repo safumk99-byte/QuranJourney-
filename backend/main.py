@@ -12,7 +12,7 @@ from typing import Generator
 from zoneinfo import ZoneInfo
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -1121,6 +1121,60 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
+
+@app.get("/students/{student_id}/attendance/monthly-score")
+def get_monthly_attendance_score(
+    student_id: int,
+    year: int = Query(ge=2000, le=2100),
+    month: int = Query(ge=1, le=12),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Calculate monthly attendance points out of 10 using recorded class working days."""
+    check_student_access(student_id, user, db)
+    student = db.get(Student, student_id)
+    start = date(year, month, 1)
+    end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+
+    class_query = select(Attendance.attendance_date).join(Student, Student.id == Attendance.student_id).where(
+        Student.is_active.is_(True),
+        Attendance.attendance_date >= start,
+        Attendance.attendance_date < end,
+    )
+    if student.class_name:
+        class_query = class_query.where(Student.class_name == student.class_name)
+    else:
+        class_query = class_query.where(Attendance.student_id == student_id)
+    working_dates = set(db.scalars(class_query.distinct()).all())
+
+    student_rows = db.scalars(select(Attendance).where(
+        Attendance.student_id == student_id,
+        Attendance.attendance_date >= start,
+        Attendance.attendance_date < end,
+    ).order_by(Attendance.attendance_date, Attendance.period, Attendance.id)).all()
+    statuses_by_date: dict[date, list[str]] = {}
+    for row in student_rows:
+        statuses_by_date.setdefault(row.attendance_date, []).append((row.status or "").lower())
+
+    present_days = sum(
+        1 for day_statuses in statuses_by_date.values()
+        if day_statuses and all(value in {"present", "late"} for value in day_statuses)
+    )
+    working_days = len(working_dates)
+    percentage = round((present_days / working_days) * 100, 2) if working_days else 0.0
+    points = round((percentage / 100) * 10, 2)
+    return {
+        "student_id": student_id,
+        "year": year,
+        "month": month,
+        "working_days": working_days,
+        "present_days": present_days,
+        "attendance_percentage": percentage,
+        "attendance_points": points,
+        "max_points": 10,
+        "basis": "unique attendance dates recorded for the student's class; a day counts present only when all recorded periods are present or late",
+    }
+
 
 @app.get("/students/{student_id}/attendance")
 def get_attendance(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
