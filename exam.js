@@ -9,7 +9,7 @@ const sid=()=> $('student').value;
 async function api(p,o={}){return A.api(p,o)}
 function setupType(){
  const t=type(),monthly=t==='monthly',single=t==='juz',semester=t==='semester';
- const setVisible=(id,visible)=>{const el=$(id);el.hidden=!visible;el.style.setProperty('display',visible?(id==='semesterRangeField'?'grid':'block'):'none','important')};
+ const setVisible=(id,visible)=>{const el=$(id);el.hidden=!visible;el.style.setProperty('display',visible?(id==='semesterRangeField'?'contents':'block'):'none','important')};
  setVisible('monthField',monthly);
  setVisible('singleJuzField',single);
  setVisible('semesterRangeField',semester);
