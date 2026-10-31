@@ -659,6 +659,23 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    # Preserve existing profile-level character points as this month's opening values.
+    # The NOT EXISTS guard makes this migration safe to run on every restart.
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    with engine.begin() as conn:
+        conn.execute(sql_text("""
+            INSERT INTO monthly_character_points
+                (student_id, year, month, cleanliness_points, discipline_points, worship_points)
+            SELECT s.id, :year, :month, s.cleanliness_points, s.discipline_points, s.worship_points
+            FROM students s
+            WHERE (COALESCE(s.cleanliness_points, 0) <> 0
+                OR COALESCE(s.discipline_points, 0) <> 0
+                OR COALESCE(s.worship_points, 0) <> 0)
+              AND NOT EXISTS (
+                SELECT 1 FROM monthly_character_points m
+                WHERE m.student_id = s.id AND m.year = :year AND m.month = :month
+              )
+        """), {"year": today.year, "month": today.month})
     # Add Juz columns in a SQLite- and PostgreSQL-compatible way.
     from sqlalchemy import inspect
     inspector = inspect(engine)
