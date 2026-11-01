@@ -385,6 +385,19 @@ class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=6, max_length=256)
 
+class ChangeTeacherCredentialsInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_login_id: str = Field(min_length=3, max_length=80)
+    new_password: str = Field(min_length=6, max_length=256)
+
+    @field_validator("new_login_id")
+    @classmethod
+    def clean_login_id(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Login ID must contain at least 3 characters")
+        return value
+
 class ParentPasswordResetInput(BaseModel):
     new_password: str = Field(min_length=6, max_length=256)
 
@@ -798,6 +811,22 @@ def change_password(data: ChangePasswordInput, user: User = Depends(current_user
     user.password_hash = password_hash.hash(data.new_password)
     db.commit()
     return {"success": True, "message": "Password changed successfully. Please sign in again."}
+
+@app.post("/auth/change-teacher-credentials")
+def change_teacher_credentials(data: ChangeTeacherCredentialsInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Change the authenticated teacher's own Login ID and password atomically."""
+    if not password_hash.verify(data.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    new_login_id = data.new_login_id.strip()
+    duplicate = db.scalar(select(User).where(User.login_id == new_login_id, User.id != user.id))
+    if duplicate:
+        raise HTTPException(status_code=409, detail="This Login ID is already in use. Choose another one.")
+    if password_hash.verify(data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must be different from the current password")
+    user.login_id = new_login_id
+    user.password_hash = password_hash.hash(data.new_password)
+    db.commit()
+    return {"success": True, "login_id": user.login_id, "message": "Login ID and password updated. Please sign in again."}
 
 @app.get("/students")
 def list_students(user: User = Depends(current_user), db: Session = Depends(get_db)):
