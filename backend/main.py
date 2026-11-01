@@ -6,6 +6,7 @@ import json
 import random
 import base64
 import binascii
+import io
 import re
 
 import cloudinary
@@ -630,7 +631,7 @@ def _store_student_photo(photo_value: str | None, student_id: int | str) -> tupl
     if not _cloudinary_ready():
         raise HTTPException(status_code=503, detail="Cloudinary is not configured. Check the Render environment variables.")
     try:
-        result = cloudinary.uploader.upload(raw, folder="quranjourney/students",
+        result = cloudinary.uploader.upload(io.BytesIO(raw), folder="quranjourney/students",
             public_id=f"student-{student_id}-{uuid.uuid4().hex[:10]}", resource_type="image",
             overwrite=False, allowed_formats=["jpg", "jpeg", "png", "webp"])
         return result["secure_url"], result["public_id"]
@@ -922,9 +923,9 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     old_photo_public_id = student.photo_public_id
     if "photo_data" in values:
         incoming_photo = values.pop("photo_data")
-        if incoming_photo:
+        if incoming_photo and incoming_photo != student.photo_data:
             student.photo_data, student.photo_public_id = _store_student_photo(incoming_photo, student.id)
-        else:
+        elif not incoming_photo:
             student.photo_data, student.photo_public_id = None, None
     old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     old_juz = int(student.current_juz or 1)
