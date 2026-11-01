@@ -959,8 +959,10 @@ def delete_student(student_id: int, user: User = Depends(require_teacher), db: S
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     # Soft-delete so accidental removal does not cascade-delete reading, attendance, marks, or parent links.
+    old_photo_public_id = student.photo_public_id
     student.is_active = False
     db.commit()
+    _delete_cloudinary_photo(old_photo_public_id)
     return Response(status_code=204)
 
 
