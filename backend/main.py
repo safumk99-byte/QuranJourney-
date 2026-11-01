@@ -4,6 +4,13 @@ from __future__ import annotations
 import os
 import json
 import random
+import base64
+import binascii
+import io
+import re
+
+import cloudinary
+import cloudinary.uploader
 import uuid
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
@@ -60,6 +67,7 @@ class Student(Base):
     current_juz: Mapped[int] = mapped_column(Integer, default=1)
     journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cleanliness_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     discipline_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     worship_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -409,7 +417,7 @@ class StudentInput(BaseModel):
     completed_pages: float = Field(default=0, ge=0, le=2000)
     current_juz: int = Field(default=1, ge=1, le=30)
     journey_start_date: date | None = None
-    photo_data: str | None = None
+    photo_data: str | None = Field(default=None, max_length=15_000_000)
 
     @model_validator(mode="after")
     def validate_progress(self):
@@ -596,6 +604,50 @@ class MarkInput(BaseModel):
             raise ValueError("points must equal S + MS + MU when a breakdown is provided")
         return self
 
+def _cloudinary_ready() -> bool:
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
+    api_key = os.getenv("CLOUDINARY_API_KEY", "").strip()
+    api_secret = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+    if not (cloud_name and api_key and api_secret):
+        return False
+    cloudinary.config(cloud_name=cloud_name, api_key=api_key, api_secret=api_secret, secure=True)
+    return True
+
+
+def _store_student_photo(photo_value: str | None, student_id: int | str) -> tuple[str | None, str | None]:
+    if not photo_value:
+        return None, None
+    if photo_value.startswith(("https://", "http://")):
+        return photo_value, None
+    match = re.fullmatch(r"data:image/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\\r\\n]+)", photo_value)
+    if not match:
+        raise HTTPException(status_code=422, detail="Student photo must be a valid JPEG, PNG, or WebP image.")
+    try:
+        raw = base64.b64decode(match.group(2), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid student photo data.") from exc
+    if not raw or len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Student photo must be smaller than 10 MB.")
+    if not _cloudinary_ready():
+        raise HTTPException(status_code=503, detail="Cloudinary is not configured. Check the Render environment variables.")
+    try:
+        result = cloudinary.uploader.upload(io.BytesIO(raw), folder="quranjourney/students",
+            public_id=f"student-{student_id}-{uuid.uuid4().hex[:10]}", resource_type="image",
+            overwrite=False, allowed_formats=["jpg", "jpeg", "png", "webp"])
+        return result["secure_url"], result["public_id"]
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Student photo upload failed. Please retry.") from exc
+
+
+def _delete_cloudinary_photo(public_id: str | None) -> None:
+    if not public_id or not _cloudinary_ready():
+        return
+    try:
+        cloudinary.uploader.destroy(public_id, resource_type="image", invalidate=True)
+    except Exception:
+        pass
+
+
 app = FastAPI(title="Quran Journey API", version="0.1.0")
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "https://safumk99-byte.github.io").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
@@ -747,6 +799,7 @@ def startup() -> None:
                 "current_juz": "INTEGER NOT NULL DEFAULT 1",
                 "journey_start_date": "DATE NULL",
                 "photo_data": "TEXT NULL",
+                "photo_public_id": "VARCHAR(255) NULL",
                 "cleanliness_points": "INTEGER NOT NULL DEFAULT 0",
                 "discipline_points": "INTEGER NOT NULL DEFAULT 0",
                 "worship_points": "INTEGER NOT NULL DEFAULT 0",
@@ -849,8 +902,10 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     student = Student(
         student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name,
         total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=data.current_juz,
-        journey_start_date=data.journey_start_date, photo_data=data.photo_data,
+        journey_start_date=data.journey_start_date,
     )
+    if data.photo_data:
+        student.photo_data, student.photo_public_id = _store_student_photo(data.photo_data, data.student_code.strip())
     db.add(student)
     db.commit()
     db.refresh(student)
@@ -865,6 +920,13 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     values = data.model_dump(exclude_unset=True)
+    old_photo_public_id = student.photo_public_id
+    if "photo_data" in values:
+        incoming_photo = values.pop("photo_data")
+        if incoming_photo and incoming_photo != student.photo_data:
+            student.photo_data, student.photo_public_id = _store_student_photo(incoming_photo, student.id)
+        elif not incoming_photo:
+            student.photo_data, student.photo_public_id = None, None
     old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     old_juz = int(student.current_juz or 1)
     if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
@@ -884,6 +946,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
                                f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
     db.refresh(student)
+    if old_photo_public_id and old_photo_public_id != student.photo_public_id:
+        _delete_cloudinary_photo(old_photo_public_id)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
             "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
@@ -896,8 +960,10 @@ def delete_student(student_id: int, user: User = Depends(require_teacher), db: S
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     # Soft-delete so accidental removal does not cascade-delete reading, attendance, marks, or parent links.
+    old_photo_public_id = student.photo_public_id
     student.is_active = False
     db.commit()
+    _delete_cloudinary_photo(old_photo_public_id)
     return Response(status_code=204)
 
 
