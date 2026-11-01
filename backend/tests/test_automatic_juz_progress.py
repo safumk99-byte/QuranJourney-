@@ -94,3 +94,20 @@ def test_revision_only_entry_does_not_change_juz_progress(client):
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 1
     assert progress["next_juz_pages"] == 0.0
+
+
+def test_completing_all_unique_pages_of_next_juz_advances_current_juz(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-004")
+    # Juz 2 in the 604-page Madinah Mushaf runs from Al-Baqarah 2:142 to 2:252.
+    ranges = [(142, 163), (164, 185), (186, 207), (208, 229), (230, 252)]
+    for start_ayah, end_ayah in ranges:
+        response = lesson(
+            client, headers, student_id,
+            start_ayah=start_ayah, end_ayah=end_ayah, pages="5",
+        )
+        assert response.status_code == 201, response.text
+
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 2
+    assert progress["next_juz_pages"] == 0.0
