@@ -383,15 +383,7 @@ class LoginInput(BaseModel):
 
 class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=12, max_length=256)
-
-    @field_validator('new_password')
-    @classmethod
-    def validate_new_password(cls, value: str) -> str:
-        value = value.strip()
-        if len(value) < 12 or not any(c.isalpha() for c in value) or not any(c.isdigit() for c in value):
-            raise ValueError('New password must contain at least 12 characters, including letters and numbers')
-        return value
+    new_password: str = Field(min_length=6, max_length=256)
 
 class StudentInput(BaseModel):
     student_code: str = Field(min_length=1, max_length=80)
