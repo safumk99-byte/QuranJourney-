@@ -65,6 +65,7 @@ class Student(Base):
     total_pages: Mapped[int] = mapped_column(Integer, default=604)
     completed_pages: Mapped[float] = mapped_column(Float, default=0.0)
     current_juz: Mapped[int] = mapped_column(Integer, default=1)
+    next_juz_pages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -416,6 +417,7 @@ class StudentInput(BaseModel):
     total_pages: int = Field(default=604, ge=1, le=2000)
     completed_pages: float = Field(default=0, ge=0, le=2000)
     current_juz: int = Field(default=1, ge=1, le=30)
+    next_juz_pages: int = Field(default=0, ge=0, le=20)
     journey_start_date: date | None = None
     photo_data: str | None = Field(default=None, max_length=15_000_000)
 
@@ -455,6 +457,7 @@ class StudentUpdateInput(BaseModel):
     total_pages: int | None = Field(default=None, ge=1, le=2000)
     completed_pages: float | None = Field(default=None, ge=0, le=2000)
     current_juz: int | None = Field(default=None, ge=1, le=30)
+    next_juz_pages: int | None = Field(default=None, ge=0, le=20)
     journey_start_date: date | None = None
     photo_data: str | None = None
     cleanliness_points: int | None = Field(default=None, ge=0, le=100000)
@@ -797,6 +800,7 @@ def startup() -> None:
                 "total_pages": "INTEGER NOT NULL DEFAULT 604",
                 "completed_pages": "DOUBLE PRECISION NOT NULL DEFAULT 0",
                 "current_juz": "INTEGER NOT NULL DEFAULT 1",
+                "next_juz_pages": "INTEGER NOT NULL DEFAULT 0",
                 "journey_start_date": "DATE NULL",
                 "photo_data": "TEXT NULL",
                 "photo_public_id": "VARCHAR(255) NULL",
@@ -893,7 +897,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         if not ids:
             return []
         query = query.where(Student.id.in_(ids))
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in db.scalars(query.order_by(Student.name)).all()]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in db.scalars(query.order_by(Student.name)).all()]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -902,7 +906,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     student = Student(
         student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name,
         total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=data.current_juz,
-        journey_start_date=data.journey_start_date,
+        next_juz_pages=data.next_juz_pages, journey_start_date=data.journey_start_date,
     )
     if data.photo_data:
         student.photo_data, student.photo_public_id = _store_student_photo(data.photo_data, data.student_code.strip())
@@ -910,7 +914,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
-            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
+            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz, "next_juz_pages": student.next_juz_pages or 0,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
             "photo_data": student.photo_data, "cleanliness_points": student.cleanliness_points, "discipline_points": student.discipline_points, "worship_points": student.worship_points}
 
