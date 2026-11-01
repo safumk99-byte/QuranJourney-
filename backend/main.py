@@ -1265,7 +1265,7 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     if end < start_date or start_date > today:
         return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
     cursor = start_date - timedelta(days=start_date.weekday()) if kind == "week" else start_date.replace(day=1)
-    reading_rows = db.scalars(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= start_date, ReadingEntry.entry_date <= today)).all()
+    reading_rows = db.execute(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= start_date, ReadingEntry.entry_date <= today)).all()
     pages_by_date = {}
     for entry_day, page_value in reading_rows:
         pages_by_date[entry_day] = pages_by_date.get(entry_day, 0.0) + reading_page_count(page_value)
