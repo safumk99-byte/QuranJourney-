@@ -1413,16 +1413,27 @@ def get_monthly_attendance_score(
     start = date(year, month, 1)
     end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
-    class_query = select(Attendance.attendance_date).join(Student, Student.id == Attendance.student_id).where(
-        Student.is_active.is_(True),
-        Attendance.attendance_date >= start,
-        Attendance.attendance_date < end,
-    )
-    if student.class_name:
-        class_query = class_query.where(Student.class_name == student.class_name)
+    # Parent reports use only this child's attendance dates. Teachers retain
+    # the class-working-day denominator used by the existing staff reports.
+    if user.role == "parent":
+        working_query = select(Attendance.attendance_date).where(
+            Attendance.student_id == student_id,
+            Attendance.attendance_date >= start,
+            Attendance.attendance_date < end,
+        )
     else:
-        class_query = class_query.where(Attendance.student_id == student_id)
-    working_dates = set(db.scalars(class_query.distinct()).all())
+        working_query = select(Attendance.attendance_date).join(
+            Student, Student.id == Attendance.student_id
+        ).where(
+            Student.is_active.is_(True),
+            Attendance.attendance_date >= start,
+            Attendance.attendance_date < end,
+        )
+        if student.class_name:
+            working_query = working_query.where(Student.class_name == student.class_name)
+        else:
+            working_query = working_query.where(Attendance.student_id == student_id)
+    working_dates = set(db.scalars(working_query.distinct()).all())
 
     student_rows = db.scalars(select(Attendance).where(
         Attendance.student_id == student_id,
@@ -1449,7 +1460,7 @@ def get_monthly_attendance_score(
         "attendance_percentage": percentage,
         "attendance_points": points,
         "max_points": 10,
-        "basis": "unique attendance dates recorded for the student's class; a day counts present only when all recorded periods are present or late",
+        "basis": ("unique attendance dates recorded for this student; a day counts present only when all recorded periods are present or late" if user.role == "parent" else "unique attendance dates recorded for the student's class; a day counts present only when all recorded periods are present or late"),
     }
 
 
