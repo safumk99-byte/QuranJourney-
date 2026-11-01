@@ -777,32 +777,15 @@ def _ayah_ordinal(surah: int, ayah: int) -> int:
 
 def _lesson_juz_page_contributions(start_surah: int | None, start_ayah: int | None,
                                    end_surah: int | None, end_ayah: int | None,
-                                   pages_value: str | None) -> dict[str, float]:
-    """Allocate the entered New Lesson page count across the exact Madinah page/Juz intersections."""
-    page_count = reading_page_count(pages_value)
-    if not all(v is not None for v in (start_surah, start_ayah, end_surah, end_ayah)) or page_count <= 0:
+                                   pages_value: str | None) -> dict[str, int]:
+    """Store exact ayah ordinals; unioning these later prevents duplicate lesson coverage."""
+    if not all(v is not None for v in (start_surah, start_ayah, end_surah, end_ayah)) or reading_page_count(pages_value) <= 0:
         return {}
     start_ord = _ayah_ordinal(int(start_surah), int(start_ayah))
     end_ord = _ayah_ordinal(int(end_surah), int(end_ayah))
     if end_ord < start_ord:
         return {}
-    weights: dict[int, float] = {}
-    total_weight = 0.0
-    for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
-        left, right = max(start_ord, page_start), min(end_ord, page_end)
-        if left > right:
-            continue
-        page_length = page_end - page_start + 1
-        page_fraction = (right - left + 1) / page_length
-        total_weight += page_fraction
-        for juz_no, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
-            overlap = min(right, juz_end) - max(left, juz_start) + 1
-            if overlap > 0:
-                weights[juz_no] = weights.get(juz_no, 0.0) + overlap / page_length
-    if total_weight <= 0:
-        return {}
-    return {str(juz_no): round(page_count * weight / total_weight, 4)
-            for juz_no, weight in weights.items() if weight > 0}
+    return {"start": start_ord, "end": end_ord}
 
 def _juz_page_capacity(juz_no: int) -> float:
     interval = next(((start, end) for number, start, end in _QURAN_JUZ_INTERVALS if number == juz_no), None)
@@ -821,14 +804,14 @@ def _set_reading_juz_contribution(row: ReadingEntry) -> None:
     row.juz_progress_data = json.dumps(values, separators=(",", ":")) if values else None
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild auto-tracked Juz progress from new tracking entries, preserving the pre-tracking baseline."""
+    """Rebuild automatic Juz progress from unique ayah coverage, preserving the pre-tracking baseline."""
     student = db.get(Student, student_id)
     if student is None:
         return
     if student.juz_progress_base_juz is None:
         student.juz_progress_base_juz = int(student.current_juz or 1)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
-    by_juz: dict[int, float] = {}
+    intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
         ReadingEntry.juz_progress_data.is_not(None)
@@ -836,15 +819,32 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     for entry in rows:
         try:
             contribution = json.loads(entry.juz_progress_data or "{}")
-        except (TypeError, ValueError):
+            start, end = int(contribution["start"]), int(contribution["end"])
+        except (TypeError, ValueError, KeyError):
             continue
-        for key, value in contribution.items():
-            try:
-                juz_no, amount = int(key), float(value)
-            except (TypeError, ValueError):
+        if 0 <= start <= end < sum(SURAH_AYAH_COUNTS):
+            intervals.append((start, end))
+    # Merge overlapping or repeated lesson ranges before counting any page fraction.
+    merged: list[list[int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    by_juz: dict[int, float] = {}
+    for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
+        page_length = page_end - page_start + 1
+        for juz_no, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
+            left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
+            if left_bound > right_bound:
                 continue
-            if 1 <= juz_no <= 30 and amount > 0:
-                by_juz[juz_no] = by_juz.get(juz_no, 0.0) + amount
+            covered = 0
+            for start, end in merged:
+                left, right = max(start, left_bound), min(end, right_bound)
+                if left <= right:
+                    covered += right - left + 1
+            if covered:
+                by_juz[juz_no] = by_juz.get(juz_no, 0.0) + covered / page_length
     current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
     while current < 30:
