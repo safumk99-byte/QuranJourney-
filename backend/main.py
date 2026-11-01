@@ -870,11 +870,22 @@ def create_parent(data: ParentInput, user: User = Depends(require_teacher), db: 
 def get_parent_notifications(user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role != "parent":
         raise HTTPException(status_code=403, detail="Parent access required")
-    rows = db.scalars(select(ParentNotification).where(ParentNotification.parent_user_id == user.id)
-                      .order_by(ParentNotification.created_at.desc()).limit(100)).all()
-    return [{"id": r.id, "student_id": r.student_id, "title": r.title, "message": r.message,
-             "type": r.notification_type, "created_at": r.created_at.isoformat(),
-             "read": r.read_at is not None} for r in rows]
+    rows = db.execute(
+        select(ParentNotification, Student.name)
+        .join(ParentStudent, ParentStudent.student_id == ParentNotification.student_id)
+        .join(Student, Student.id == ParentNotification.student_id)
+        .where(
+            ParentNotification.parent_user_id == user.id,
+            ParentStudent.parent_user_id == user.id,
+            Student.is_active.is_(True),
+        )
+        .order_by(ParentNotification.created_at.desc())
+        .limit(100)
+    ).all()
+    return [{"id": r.id, "student_id": r.student_id, "student_name": student_name,
+             "title": r.title, "message": r.message, "type": r.notification_type,
+             "created_at": r.created_at.isoformat(), "read": r.read_at is not None}
+            for r, student_name in rows]
 
 
 @app.post("/parent/notifications/{notification_id}/read")
