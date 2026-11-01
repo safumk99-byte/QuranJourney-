@@ -845,6 +845,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
                     covered += right - left + 1
             if covered:
                 by_juz[juz_no] = by_juz.get(juz_no, 0.0) + covered / page_length
+    previous_current = int(student.current_juz or 1)
     current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
     while current < 30:
@@ -857,6 +858,9 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         current += 1
     student.current_juz = current
     student.next_juz_pages = round(pending, 2)
+    if current > previous_current:
+        notify_student_parents(db, student.id, f"current-juz:{current}", "New Juz reached",
+                               f"{student.name} has reached Juz {current}.", "juz")
 
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
