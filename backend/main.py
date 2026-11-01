@@ -904,6 +904,22 @@ def startup() -> None:
                 conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "start_juz" INTEGER NULL'))
             if "end_juz" not in existing_columns:
                 conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "end_juz" INTEGER NULL'))
+    # Additive Juz-progress migration for existing SQLite databases as well as fresh installs.
+    from sqlalchemy import inspect
+    if engine.dialect.name == "sqlite":
+        sqlite_columns = {
+            "students": {
+                "juz_progress_base_juz": "INTEGER NULL",
+                "juz_progress_base_pages": "FLOAT NULL",
+            },
+            "reading_entries": {"juz_progress_data": "TEXT NULL"},
+        }
+        with engine.begin() as conn:
+            for table, columns in sqlite_columns.items():
+                existing = {column["name"] for column in inspect(conn).get_columns(table)}
+                for column, definition in columns.items():
+                    if column not in existing:
+                        conn.execute(sql_text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'))
     # Additive, non-destructive migration for databases created by earlier scaffold versions.
     if engine.dialect.name == "postgresql":
         additive = {
@@ -1056,6 +1072,10 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
     for key, value in values.items():
         setattr(student, key, value)
+    # A teacher's explicit Juz edit resets the automatic-tracking baseline.
+    if "current_juz" in values or "next_juz_pages" in values:
+        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_pages = float(student.next_juz_pages or 0)
     new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     if new_percent > old_percent:
         notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
@@ -1069,6 +1089,7 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         _delete_cloudinary_photo(old_photo_public_id)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
             "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
+            "next_juz_pages": student.next_juz_pages or 0,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
             "photo_data": student.photo_data}
 
