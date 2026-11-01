@@ -385,6 +385,19 @@ class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=6, max_length=256)
 
+class ChangeTeacherCredentialsInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_login_id: str = Field(min_length=3, max_length=80)
+    new_password: str = Field(min_length=6, max_length=256)
+
+    @field_validator("new_login_id")
+    @classmethod
+    def clean_login_id(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Login ID must contain at least 3 characters")
+        return value
+
 class ParentPasswordResetInput(BaseModel):
     new_password: str = Field(min_length=6, max_length=256)
 
@@ -758,17 +771,21 @@ def startup() -> None:
             conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" SET DEFAULT 0'))
             for table in ("students", "daily_marks", "reading_entries", "attendance"):
                 conn.execute(sql_text(f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table}_legacy_id" ON "{table}" ("legacy_id") WHERE "legacy_id" IS NOT NULL'))
-    # Create the first teacher only when explicitly configured; never seed a default password.
+    # Bootstrap the initial teacher only when the database has no teacher account.
+    # This prevents old Render INITIAL_TEACHER_* values from recreating a second
+    # account after the existing teacher changes their Login ID.
     login_id = os.getenv("INITIAL_TEACHER_ID", "").strip()
     password = os.getenv("INITIAL_TEACHER_PASSWORD", "")
     if login_id and password:
         with SessionLocal() as db:
-            existing = db.scalar(select(User).where(User.login_id == login_id))
-            if not existing:
-                if len(password) < 12:
-                    raise RuntimeError("INITIAL_TEACHER_PASSWORD must be at least 12 characters")
-                db.add(User(login_id=login_id, password_hash=password_hash.hash(password), role="teacher"))
-                db.commit()
+            teacher_exists = db.scalar(select(User.id).where(User.role == "teacher").limit(1))
+            if not teacher_exists:
+                existing_login = db.scalar(select(User).where(User.login_id == login_id))
+                if not existing_login:
+                    if len(password) < 12:
+                        raise RuntimeError("INITIAL_TEACHER_PASSWORD must be at least 12 characters")
+                    db.add(User(login_id=login_id, password_hash=password_hash.hash(password), role="teacher"))
+                    db.commit()
 
 @app.get("/health")
 def health():
@@ -798,6 +815,22 @@ def change_password(data: ChangePasswordInput, user: User = Depends(current_user
     user.password_hash = password_hash.hash(data.new_password)
     db.commit()
     return {"success": True, "message": "Password changed successfully. Please sign in again."}
+
+@app.post("/auth/change-teacher-credentials")
+def change_teacher_credentials(data: ChangeTeacherCredentialsInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Change the authenticated teacher's own Login ID and password atomically."""
+    if not password_hash.verify(data.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    new_login_id = data.new_login_id.strip()
+    duplicate = db.scalar(select(User).where(User.login_id == new_login_id, User.id != user.id))
+    if duplicate:
+        raise HTTPException(status_code=409, detail="This Login ID is already in use. Choose another one.")
+    if password_hash.verify(data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must be different from the current password")
+    user.login_id = new_login_id
+    user.password_hash = password_hash.hash(data.new_password)
+    db.commit()
+    return {"success": True, "login_id": user.login_id, "message": "Login ID and password updated. Please sign in again."}
 
 @app.get("/students")
 def list_students(user: User = Depends(current_user), db: Session = Depends(get_db)):
