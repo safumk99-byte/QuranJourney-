@@ -17,7 +17,7 @@ const api=async(path,options={})=>{
 window.QuranJourneyAuth={api,apiBase,getUser,getToken,clear,login:async(login_id,password)=>{
  const data=await api('/auth/login',{method:'POST',auth:false,body:JSON.stringify({login_id,password})});
  localStorage.setItem(TOKEN_KEY,data.access_token);localStorage.setItem(USER_KEY,JSON.stringify(data.user));return data.user;
-},logout:()=>{clear();location.replace('./login.html')},requireRole:(roles)=>{
+},changePassword:async(current_password,new_password)=>api('/auth/change-password',{method:'POST',body:JSON.stringify({current_password,new_password})}),logout:()=>{clear();location.replace('./login.html')},requireRole:(roles)=>{
  const user=getUser();
  if(!getToken()||!user){location.replace('./login.html');return false}
  if(!roles.includes(user.role)){location.replace(user.role==='parent'?'./parent.html':'./index.html');return false}
