@@ -385,6 +385,9 @@ class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=6, max_length=256)
 
+class ParentPasswordResetInput(BaseModel):
+    new_password: str = Field(min_length=6, max_length=256)
+
 class StudentInput(BaseModel):
     student_code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
@@ -882,6 +885,48 @@ def create_parent(data: ParentInput, user: User = Depends(require_teacher), db: 
         db.add(ParentStudent(parent_user_id=parent.id, student_id=student.id))
     db.commit()
     return {"id": parent.id, "login_id": parent.login_id, "role": parent.role, "linked_students": len(students)}
+
+@app.get("/parents")
+def list_parent_accounts(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """List parent login accounts and their linked active students for teacher administration."""
+    parents = db.scalars(
+        select(User).where(User.role == "parent", User.is_active.is_(True)).order_by(User.login_id)
+    ).all()
+    result = []
+    for parent in parents:
+        student_names = db.scalars(
+            select(Student.name)
+            .join(ParentStudent, ParentStudent.student_id == Student.id)
+            .where(ParentStudent.parent_user_id == parent.id, Student.is_active.is_(True))
+            .order_by(Student.name)
+        ).all()
+        result.append({
+            "id": parent.id,
+            "login_id": parent.login_id,
+            "linked_students": student_names,
+        })
+    return result
+
+
+@app.post("/parents/{parent_id}/reset-password")
+def reset_parent_password(
+    parent_id: int,
+    data: ParentPasswordResetInput,
+    user: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    """Allow teachers to reset Parent accounts only; teacher accounts are never eligible."""
+    parent = db.scalar(select(User).where(
+        User.id == parent_id,
+        User.role == "parent",
+        User.is_active.is_(True),
+    ))
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent account not found")
+    parent.password_hash = password_hash.hash(data.new_password)
+    db.commit()
+    return {"success": True, "message": "Parent password reset successfully."}
+
 
 @app.get("/parent/notifications")
 def get_parent_notifications(user: User = Depends(current_user), db: Session = Depends(get_db)):
