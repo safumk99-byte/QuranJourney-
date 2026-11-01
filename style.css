@@ -613,3 +613,57 @@ img{max-width:100%}
 /* Three-year target metrics on the student detail summary */
 .student-detail-page .detail-profile>div{flex:1;min-width:0}.student-detail-page .student-target-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:9px;margin-top:16px}.student-detail-page .student-target-metrics>div{display:block!important;min-width:0;padding:11px;border-radius:11px;background:#f0f7f2;border:1px solid #e3eee6}.student-detail-page .student-target-metrics small{display:block;font-size:11px;margin-bottom:4px;color:var(--muted)}.student-detail-page .student-target-metrics strong{display:block;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
 .holiday-panel{margin:20px 0}.holiday-form{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}.holiday-form label{display:grid;gap:6px;font-weight:700;font-size:13px}.holiday-form input{width:100%;min-width:0}.holiday-list{display:grid;gap:8px;margin-top:12px}.holiday-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)}.holiday-row small{display:block;color:var(--muted);margin-top:3px}.holiday-actions{display:flex;gap:7px}.target-period-metrics{margin:12px 0}.target-period-metrics>div{min-width:0}.target-period-metrics strong{font-size:13px;line-height:1.5}.target-period-metrics small{display:block}@media(max-width:700px){.holiday-form{grid-template-columns:1fr}.holiday-form .actions{display:flex}.holiday-row{align-items:flex-start}.holiday-actions{flex-wrap:wrap}}:root[data-theme="dark"] .holiday-row{background:var(--surface-2);border-color:var(--line)}
+
+/* Parent portal visual refresh — responsive, calm and child-focused */
+.parent-portal{background:linear-gradient(145deg,#edf7f7 0%,#f4f8f6 48%,#eaf4ef 100%);min-height:100vh}
+.parent-portal .topbar{height:82px;background:linear-gradient(105deg,#064638,#08745a);border:0;color:#fff;box-shadow:0 5px 24px rgba(4,55,43,.16)}
+.parent-portal .brand{color:#fff;font-size:21px;letter-spacing:-.3px}
+.parent-portal .tagline{color:#d0e9df;font-size:13px}
+.parent-portal .parent-brandmark{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.parent-portal .top-pill{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.2)}
+.parent-portal .container{max-width:1320px;padding-top:26px}
+.parent-portal .hero{background:linear-gradient(115deg,#07513f 0%,#08765a 62%,#159374 100%);border:1px solid rgba(255,255,255,.24);box-shadow:0 16px 36px rgba(5,74,55,.16);min-height:180px;padding:32px 38px}
+.parent-portal .hero:after{content:"۞";position:absolute;right:19%;top:-70px;font-size:280px;line-height:1;color:rgba(255,255,255,.045);pointer-events:none}
+.parent-portal .hero-art{position:relative;z-index:1;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.22)}
+.parent-portal .panel{border:1px solid rgba(210,229,220,.9);border-radius:22px;box-shadow:0 9px 30px rgba(26,76,57,.065);padding:25px}
+.parent-portal .section-head h2{letter-spacing:-.35px}
+.parent-portal .directory-card{border:1px solid #d9eae2;border-radius:19px;background:linear-gradient(155deg,#fff 0%,#f7fcf9 100%);box-shadow:0 8px 22px rgba(21,78,57,.065);transition:transform .18s ease,box-shadow .18s ease}
+.parent-portal .directory-card:hover{transform:translateY(-3px);box-shadow:0 13px 28px rgba(21,78,57,.11)}
+.parent-portal .directory-photo{border-radius:50%;border:3px solid #e2f2e9;box-shadow:0 2px 8px rgba(12,93,65,.1)}
+.parent-portal .directory-progress{height:10px;background:#e7f1eb;border-radius:99px}
+.parent-portal .directory-progress span{background:linear-gradient(90deg,#08775a,#4bb98b)}
+.parent-portal .directory-actions .btn{border-radius:12px;box-shadow:0 4px 10px rgba(8,91,65,.13)}
+.parent-portal .parent-record-panel{border-radius:24px;background:linear-gradient(180deg,#ffffff 0%,#fbfefd 100%)}
+.parent-portal .parent-dashboard-cards{position:relative;overflow:hidden;margin:0 0 22px;padding:24px;border:1px solid #d6eee3;border-radius:22px;background:linear-gradient(115deg,#e4f7ef 0%,#e9f7f8 48%,#f0f8e9 100%)}
+.parent-portal .parent-dashboard-cards:after{content:"۞";position:absolute;right:8%;top:-56px;font-size:210px;color:rgba(7,111,78,.055);pointer-events:none}
+.parent-portal .parent-dashboard-cards>.eyebrow,.parent-portal .parent-dashboard-cards>h3,.parent-portal .parent-dashboard-cards>.parent-summary-grid{position:relative;z-index:1}
+.parent-portal .parent-dashboard-cards h3{font-size:23px;color:#103f32;margin:5px 0 17px;letter-spacing:-.4px}
+.parent-portal .parent-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.parent-portal .parent-summary-card{position:relative;min-width:0;min-height:154px;padding:19px 18px 17px 70px;border:1px solid rgba(255,255,255,.95);border-radius:19px;background:rgba(255,255,255,.86);box-shadow:0 7px 17px rgba(25,77,57,.07);gap:7px;backdrop-filter:blur(8px)}
+.parent-portal .parent-summary-card>span:not(.metric-icon){font-size:13px;line-height:1.4;color:#4c655b}
+.parent-portal .parent-summary-card strong{font-size:clamp(22px,2.2vw,29px);line-height:1.18;overflow-wrap:anywhere;color:#123d31;font-variant-numeric:tabular-nums}
+.parent-portal .parent-summary-card small{font-size:11px;line-height:1.45;color:#708279}
+.parent-portal .parent-summary-card .metric-icon{position:absolute;left:17px;top:18px;display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:#e3f2ff;color:#2477b9;font-size:23px;font-weight:800}
+.parent-portal .metric-progress .metric-icon{background:#ddf7e9;color:#128456}
+.parent-portal .metric-pace .metric-icon{background:#eee7ff;color:#7352c4}
+.parent-portal .metric-estimate .metric-icon{background:#fff0dc;color:#c47720}
+.parent-portal .metric-progress:after{content:"";display:block;height:7px;margin-top:5px;border-radius:99px;background:linear-gradient(90deg,#15986a var(--metric-progress,0%),#e4eee8 var(--metric-progress,0%));}
+.parent-portal .parent-record-grid{gap:16px}
+.parent-portal .parent-record-section:not(.parent-dashboard-cards){padding:19px;border:1px solid #e3eee8;border-radius:17px;background:#fff}
+.parent-portal .parent-record-section h3{color:#174a39;font-size:17px}
+.parent-portal .parent-record-section .table-wrap{border-color:#e2ece6;border-radius:13px}
+.parent-portal .parent-record-section table th{background:#edf7f1;color:#285542}
+.parent-portal .parent-notification{border-radius:16px;box-shadow:0 3px 12px rgba(25,77,57,.04)}
+.parent-portal .parent-notification.is-unread{background:linear-gradient(100deg,#effaf4,#fff);border-left-width:5px}
+.parent-portal footer{color:#82948b}
+:root[data-theme="dark"] .parent-portal{background:linear-gradient(145deg,#101d19,#14251e 55%,#10221c)}
+:root[data-theme="dark"] .parent-portal .parent-record-panel,:root[data-theme="dark"] .parent-portal .parent-record-section:not(.parent-dashboard-cards){background:var(--surface);border-color:var(--line)}
+:root[data-theme="dark"] .parent-portal .parent-dashboard-cards{background:linear-gradient(115deg,#18382c,#19353a 52%,#283727);border-color:#315746}
+:root[data-theme="dark"] .parent-portal .parent-dashboard-cards h3,:root[data-theme="dark"] .parent-portal .parent-record-section h3{color:#d5f2e3}
+:root[data-theme="dark"] .parent-portal .parent-summary-card{background:rgba(27,48,39,.92);border-color:#355343}
+:root[data-theme="dark"] .parent-portal .parent-summary-card strong{color:#d9f5e6}
+:root[data-theme="dark"] .parent-portal .parent-summary-card>span:not(.metric-icon),:root[data-theme="dark"] .parent-portal .parent-summary-card small{color:#afc5b8}
+:root[data-theme="dark"] .parent-portal .parent-record-section table th{background:#243c30;color:#d9f5e6}
+@media(max-width:1000px){.parent-portal .parent-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.parent-portal .topbar{height:70px}.parent-portal .brand{font-size:18px}.parent-portal .container{padding:13px 10px}.parent-portal .hero{padding:22px 17px}.parent-portal .hero:after{right:-30px;font-size:180px}.parent-portal .panel{padding:15px;border-radius:17px}.parent-portal .parent-dashboard-cards{padding:17px 13px;border-radius:18px}.parent-portal .parent-dashboard-cards h3{font-size:20px}.parent-portal .parent-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.parent-portal .parent-summary-card{min-height:142px;padding:61px 11px 13px;gap:6px;border-radius:15px}.parent-portal .parent-summary-card .metric-icon{left:11px;top:10px;width:38px;height:38px;border-radius:12px;font-size:20px}.parent-portal .parent-summary-card strong{font-size:21px}.parent-portal .parent-summary-card>span:not(.metric-icon){font-size:12px}.parent-portal .parent-summary-card small{font-size:10px}.parent-portal .parent-record-section:not(.parent-dashboard-cards){padding:13px;border-radius:14px}}
+@media(max-width:360px){.parent-portal .parent-summary-grid{grid-template-columns:1fr}.parent-portal .parent-summary-card{min-height:116px;padding:18px 14px 14px 62px}.parent-portal .parent-summary-card .metric-icon{left:12px;top:18px}}
