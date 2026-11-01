@@ -65,7 +65,9 @@ class Student(Base):
     total_pages: Mapped[int] = mapped_column(Integer, default=604)
     completed_pages: Mapped[float] = mapped_column(Float, default=0.0)
     current_juz: Mapped[int] = mapped_column(Integer, default=1)
-    next_juz_pages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_juz_pages: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    juz_progress_base_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    juz_progress_base_pages: Mapped[float | None] = mapped_column(Float, nullable=True)
     journey_start_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     photo_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_public_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -138,6 +140,7 @@ class ReadingEntry(Base):
     general_revision: Mapped[str | None] = mapped_column(Text, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     legacy_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
+    juz_progress_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Attendance(Base):
@@ -417,7 +420,7 @@ class StudentInput(BaseModel):
     total_pages: int = Field(default=604, ge=1, le=2000)
     completed_pages: float = Field(default=0, ge=0, le=2000)
     current_juz: int = Field(default=1, ge=1, le=30)
-    next_juz_pages: int = Field(default=0, ge=0, le=20)
+    next_juz_pages: float = Field(default=0, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = Field(default=None, max_length=15_000_000)
 
@@ -457,7 +460,7 @@ class StudentUpdateInput(BaseModel):
     total_pages: int | None = Field(default=None, ge=1, le=2000)
     completed_pages: float | None = Field(default=None, ge=0, le=2000)
     current_juz: int | None = Field(default=None, ge=1, le=30)
-    next_juz_pages: int | None = Field(default=None, ge=0, le=20)
+    next_juz_pages: float | None = Field(default=None, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = None
     cleanliness_points: int | None = Field(default=None, ge=0, le=100000)
@@ -747,6 +750,118 @@ def reading_page_count(value: str | None) -> float:
     except (ValueError, TypeError):
         return 0.0
 
+
+# Quran page/Juz metadata for the standard 604-page Madinah Mushaf.
+_QURAN_MAP_PATH = os.path.join(os.path.dirname(__file__), "quran_page_map.json")
+with open(_QURAN_MAP_PATH, "r", encoding="utf-8") as _map_file:
+    _QURAN_MAP = json.load(_map_file)
+_QURAN_PAGE_STARTS = [
+    (int(page), sum(SURAH_AYAH_COUNTS[:int(surah)-1]) + int(ayah)-1)
+    for page, surah, ayah in _QURAN_MAP["pages"]
+]
+_QURAN_JUZ_STARTS = [
+    (int(juz), sum(SURAH_AYAH_COUNTS[:int(surah)-1]) + int(ayah)-1)
+    for juz, surah, ayah in _QURAN_MAP["juz_starts"]
+]
+_QURAN_PAGE_INTERVALS = [
+    (page, start, (_QURAN_PAGE_STARTS[i+1][1]-1 if i+1 < len(_QURAN_PAGE_STARTS) else sum(SURAH_AYAH_COUNTS)-1))
+    for i, (page, start) in enumerate(_QURAN_PAGE_STARTS)
+]
+_QURAN_JUZ_INTERVALS = [
+    (juz, start, (_QURAN_JUZ_STARTS[i+1][1]-1 if i+1 < len(_QURAN_JUZ_STARTS) else sum(SURAH_AYAH_COUNTS)-1))
+    for i, (juz, start) in enumerate(_QURAN_JUZ_STARTS)
+]
+
+def _ayah_ordinal(surah: int, ayah: int) -> int:
+    return sum(SURAH_AYAH_COUNTS[:surah-1]) + ayah - 1
+
+def _lesson_juz_page_contributions(start_surah: int | None, start_ayah: int | None,
+                                   end_surah: int | None, end_ayah: int | None,
+                                   pages_value: str | None) -> dict[str, int]:
+    """Store exact ayah ordinals; unioning these later prevents duplicate lesson coverage."""
+    if not all(v is not None for v in (start_surah, start_ayah, end_surah, end_ayah)) or reading_page_count(pages_value) <= 0:
+        return {}
+    start_ord = _ayah_ordinal(int(start_surah), int(start_ayah))
+    end_ord = _ayah_ordinal(int(end_surah), int(end_ayah))
+    if end_ord < start_ord:
+        return {}
+    return {"start": start_ord, "end": end_ord}
+
+def _juz_page_capacity(juz_no: int) -> float:
+    interval = next(((start, end) for number, start, end in _QURAN_JUZ_INTERVALS if number == juz_no), None)
+    if interval is None:
+        return 0.0
+    start, end = interval
+    return sum(max(0, min(page_end, end) - max(page_start, start) + 1) /
+               (page_end - page_start + 1)
+               for _page, page_start, page_end in _QURAN_PAGE_INTERVALS
+               if min(page_end, end) >= max(page_start, start))
+
+def _set_reading_juz_contribution(row: ReadingEntry) -> None:
+    values = _lesson_juz_page_contributions(
+        row.start_surah, row.start_ayah, row.end_surah, row.end_ayah, row.pages
+    )
+    row.juz_progress_data = json.dumps(values, separators=(",", ":")) if values else None
+
+def _sync_student_juz_progress(db: Session, student_id: int) -> None:
+    """Rebuild automatic Juz progress from unique ayah coverage, preserving the pre-tracking baseline."""
+    student = db.get(Student, student_id)
+    if student is None:
+        return
+    if student.juz_progress_base_juz is None:
+        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_pages = float(student.next_juz_pages or 0)
+    intervals: list[tuple[int, int]] = []
+    rows = db.scalars(select(ReadingEntry).where(
+        ReadingEntry.student_id == student_id,
+        ReadingEntry.juz_progress_data.is_not(None)
+    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+    for entry in rows:
+        try:
+            contribution = json.loads(entry.juz_progress_data or "{}")
+            start, end = int(contribution["start"]), int(contribution["end"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if 0 <= start <= end < sum(SURAH_AYAH_COUNTS):
+            intervals.append((start, end))
+    # Merge overlapping or repeated lesson ranges before counting any page fraction.
+    merged: list[list[int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    by_juz: dict[int, float] = {}
+    for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
+        page_length = page_end - page_start + 1
+        for juz_no, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
+            left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
+            if left_bound > right_bound:
+                continue
+            covered = 0
+            for start, end in merged:
+                left, right = max(start, left_bound), min(end, right_bound)
+                if left <= right:
+                    covered += right - left + 1
+            if covered:
+                by_juz[juz_no] = by_juz.get(juz_no, 0.0) + covered / page_length
+    previous_current = int(student.current_juz or 1)
+    current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
+    pending = max(0.0, float(student.juz_progress_base_pages or 0))
+    while current < 30:
+        available = pending + by_juz.get(current + 1, 0.0)
+        capacity = _juz_page_capacity(current + 1)
+        if capacity <= 0 or available + 1e-6 < capacity:
+            pending = available
+            break
+        pending = max(0.0, available - capacity)
+        current += 1
+    student.current_juz = current
+    student.next_juz_pages = round(pending, 2)
+    if current > previous_current:
+        notify_student_parents(db, student.id, f"current-juz:{current}", "New Juz reached",
+                               f"{student.name} has reached Juz {current}.", "juz")
+
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
         return
@@ -793,6 +908,22 @@ def startup() -> None:
                 conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "start_juz" INTEGER NULL'))
             if "end_juz" not in existing_columns:
                 conn.execute(sql_text('ALTER TABLE "challenge_ranges" ADD COLUMN "end_juz" INTEGER NULL'))
+    # Additive Juz-progress migration for existing SQLite databases as well as fresh installs.
+    from sqlalchemy import inspect
+    if engine.dialect.name == "sqlite":
+        sqlite_columns = {
+            "students": {
+                "juz_progress_base_juz": "INTEGER NULL",
+                "juz_progress_base_pages": "FLOAT NULL",
+            },
+            "reading_entries": {"juz_progress_data": "TEXT NULL"},
+        }
+        with engine.begin() as conn:
+            for table, columns in sqlite_columns.items():
+                existing = {column["name"] for column in inspect(conn).get_columns(table)}
+                for column, definition in columns.items():
+                    if column not in existing:
+                        conn.execute(sql_text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'))
     # Additive, non-destructive migration for databases created by earlier scaffold versions.
     if engine.dialect.name == "postgresql":
         additive = {
@@ -800,7 +931,9 @@ def startup() -> None:
                 "total_pages": "INTEGER NOT NULL DEFAULT 604",
                 "completed_pages": "DOUBLE PRECISION NOT NULL DEFAULT 0",
                 "current_juz": "INTEGER NOT NULL DEFAULT 1",
-                "next_juz_pages": "INTEGER NOT NULL DEFAULT 0",
+                "next_juz_pages": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+                "juz_progress_base_juz": "INTEGER NULL",
+                "juz_progress_base_pages": "DOUBLE PRECISION NULL",
                 "journey_start_date": "DATE NULL",
                 "photo_data": "TEXT NULL",
                 "photo_public_id": "VARCHAR(255) NULL",
@@ -815,7 +948,7 @@ def startup() -> None:
                 "score_mu": "INTEGER NOT NULL DEFAULT 0",
                 "legacy_id": "VARCHAR(120) NULL",
             },
-            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL", "new_lesson": "TEXT NULL", "pages": "VARCHAR(200) NULL", "recent_revision": "TEXT NULL", "general_revision": "TEXT NULL", "remarks": "TEXT NULL"},
+            "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL", "new_lesson": "TEXT NULL", "pages": "VARCHAR(200) NULL", "recent_revision": "TEXT NULL", "general_revision": "TEXT NULL", "remarks": "TEXT NULL", "juz_progress_data": "TEXT NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL", "period": "INTEGER NOT NULL DEFAULT 1"},
             "exam_sessions": {"exam_type": "VARCHAR(20) NOT NULL DEFAULT 'monthly'", "start_juz": "INTEGER NULL", "end_juz": "INTEGER NULL"},
         }
@@ -826,6 +959,8 @@ def startup() -> None:
             # Convert legacy integer progress to a fractional type without losing existing values.
             conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" TYPE DOUBLE PRECISION USING "completed_pages"::double precision'))
             conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" SET DEFAULT 0'))
+            conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "next_juz_pages" TYPE DOUBLE PRECISION USING "next_juz_pages"::double precision'))
+            conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "next_juz_pages" SET DEFAULT 0'))
             for table in ("students", "daily_marks", "reading_entries", "attendance"):
                 conn.execute(sql_text(f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table}_legacy_id" ON "{table}" ("legacy_id") WHERE "legacy_id" IS NOT NULL'))
     # Bootstrap the initial teacher only when the database has no teacher account.
@@ -941,6 +1076,10 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
     for key, value in values.items():
         setattr(student, key, value)
+    # A teacher's explicit Juz edit resets the automatic-tracking baseline.
+    if "current_juz" in values or "next_juz_pages" in values:
+        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_pages = float(student.next_juz_pages or 0)
     new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     if new_percent > old_percent:
         notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
@@ -954,6 +1093,7 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         _delete_cloudinary_photo(old_photo_public_id)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
             "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz,
+            "next_juz_pages": student.next_juz_pages or 0,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
             "photo_data": student.photo_data}
 
@@ -1506,7 +1646,7 @@ def targets_summary(user: User = Depends(current_user), db: Session = Depends(ge
 def get_reading(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
     rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id == student_id).order_by(ReadingEntry.entry_date.desc(), ReadingEntry.id.desc())).all()
-    return [{"id": r.id, "date": r.entry_date.isoformat(), "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "recent_start_surah": r.recent_start_surah, "recent_start_ayah": r.recent_start_ayah, "recent_end_surah": r.recent_end_surah, "recent_end_ayah": r.recent_end_ayah, "general_start_surah": r.general_start_surah, "general_start_ayah": r.general_start_ayah, "general_end_surah": r.general_end_surah, "general_end_ayah": r.general_end_ayah, "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "recent_pages": r.recent_pages or "0", "general_revision": r.general_revision, "general_pages": r.general_pages or "0", "remarks": r.remarks} for r in rows]
+    return [{"id": r.id, "date": r.entry_date.isoformat(), "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "recent_start_surah": r.recent_start_surah, "recent_start_ayah": r.recent_start_ayah, "recent_end_surah": r.recent_end_surah, "recent_end_ayah": r.recent_end_ayah, "general_start_surah": r.general_start_surah, "general_start_ayah": r.general_start_ayah, "general_end_surah": r.general_end_surah, "general_end_ayah": r.general_end_ayah, "new_lesson": r.new_lesson, "pages": r.pages, "recent_revision": r.recent_revision, "recent_pages": r.recent_pages or "0", "general_revision": r.general_revision, "general_pages": r.general_pages or "0", "remarks": r.remarks, "juz_progress_data": r.juz_progress_data} for r in rows]
 
 @app.patch("/students/{student_id}/reading/{entry_id}")
 def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -1538,6 +1678,9 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
         setattr(row, key, value)
     if "pages" in values:
         adjust_completed_pages(db, student_id, reading_page_count(row.pages) - old_pages)
+    _set_reading_juz_contribution(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
@@ -1550,6 +1693,8 @@ def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_
         raise HTTPException(status_code=404, detail="Reading entry not found")
     adjust_completed_pages(db, student_id, -reading_page_count(row.pages))
     db.delete(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     return Response(status_code=204)
 
@@ -1570,7 +1715,10 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
+    _set_reading_juz_contribution(row)
     db.add(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
