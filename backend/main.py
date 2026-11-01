@@ -381,6 +381,18 @@ class LoginInput(BaseModel):
     login_id: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
 
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 12 or not any(c.isalpha() for c in value) or not any(c.isdigit() for c in value):
+            raise ValueError('New password must contain at least 12 characters, including letters and numbers')
+        return value
+
 class StudentInput(BaseModel):
     student_code: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
@@ -778,6 +790,19 @@ def login(data: LoginInput, db: Session = Depends(get_db)):
 @app.get("/auth/me")
 def me(user: User = Depends(current_user)):
     return {"id": user.id, "login_id": user.login_id, "role": user.role}
+
+@app.post("/auth/change-password")
+def change_password(data: ChangePasswordInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Allow authenticated teachers and parents to change their own password only."""
+    if user.role not in ("teacher", "parent"):
+        raise HTTPException(status_code=403, detail="Teacher or Parent access required")
+    if not password_hash.verify(data.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if password_hash.verify(data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must be different from the current password")
+    user.password_hash = password_hash.hash(data.new_password)
+    db.commit()
+    return {"success": True, "message": "Password changed successfully. Please sign in again."}
 
 @app.get("/students")
 def list_students(user: User = Depends(current_user), db: Session = Depends(get_db)):
