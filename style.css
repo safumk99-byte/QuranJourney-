@@ -9,6 +9,18 @@
 
 .hero-directory-action{display:inline-flex;margin-top:16px;text-decoration:none;align-items:center;justify-content:center;min-height:46px;padding:12px 18px}.hero-directory-action:hover{filter:brightness(.96);transform:translateY(-1px)}
 
+/* Students Directory — Challenge Zone action: consistent responsive card action layout */
+.directory-actions{display:grid;grid-template-columns:1.15fr 1.15fr .8fr .8fr;gap:9px;padding:0 20px 20px;margin:0;align-items:stretch}
+.directory-actions .btn{display:flex;align-items:center;justify-content:center;min-width:0;min-height:42px;padding:10px 9px;border-radius:11px;font-size:12px;line-height:1.25;text-align:center;text-decoration:none;white-space:normal;overflow-wrap:anywhere}
+.directory-actions a.btn{color:#fff;background:linear-gradient(120deg,#08745b,#13956d);border:1px solid #08745b}
+.directory-actions button[data-edit]{color:#245fc7;background:#eef5ff;border:1px solid #d9e6ff}
+.directory-actions button[data-delete]{color:#b43b32;background:#fff2f0;border:1px solid #f3d6d2}
+.directory-actions .btn:hover{transform:translateY(-1px)}
+@media(max-width:760px){.directory-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
+@media(max-width:560px){.directory-actions{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 14px 15px;gap:8px}.directory-actions .btn{min-height:44px;font-size:12px;padding:10px 7px}}
+:root[data-theme="dark"] .directory-actions button[data-edit]{background:#23334b;color:#c7dcff;border-color:#3c5274}
+:root[data-theme="dark"] .directory-actions button[data-delete]{background:#492b2a;color:#ffe1de;border-color:#754542}
+
 /* Student management lives on the dedicated directory page */
 body:not(.directory-page) .stats,body:not(.directory-page) .layout{display:none!important}
 .directory-add-panel{margin-bottom:22px}.directory-add-panel form{margin-top:18px}.directory-add-panel form[hidden]{display:none}
