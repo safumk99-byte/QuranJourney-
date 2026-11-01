@@ -771,17 +771,21 @@ def startup() -> None:
             conn.execute(sql_text('ALTER TABLE "students" ALTER COLUMN "completed_pages" SET DEFAULT 0'))
             for table in ("students", "daily_marks", "reading_entries", "attendance"):
                 conn.execute(sql_text(f'CREATE UNIQUE INDEX IF NOT EXISTS "uq_{table}_legacy_id" ON "{table}" ("legacy_id") WHERE "legacy_id" IS NOT NULL'))
-    # Create the first teacher only when explicitly configured; never seed a default password.
+    # Bootstrap the initial teacher only when the database has no teacher account.
+    # This prevents old Render INITIAL_TEACHER_* values from recreating a second
+    # account after the existing teacher changes their Login ID.
     login_id = os.getenv("INITIAL_TEACHER_ID", "").strip()
     password = os.getenv("INITIAL_TEACHER_PASSWORD", "")
     if login_id and password:
         with SessionLocal() as db:
-            existing = db.scalar(select(User).where(User.login_id == login_id))
-            if not existing:
-                if len(password) < 12:
-                    raise RuntimeError("INITIAL_TEACHER_PASSWORD must be at least 12 characters")
-                db.add(User(login_id=login_id, password_hash=password_hash.hash(password), role="teacher"))
-                db.commit()
+            teacher_exists = db.scalar(select(User.id).where(User.role == "teacher").limit(1))
+            if not teacher_exists:
+                existing_login = db.scalar(select(User).where(User.login_id == login_id))
+                if not existing_login:
+                    if len(password) < 12:
+                        raise RuntimeError("INITIAL_TEACHER_PASSWORD must be at least 12 characters")
+                    db.add(User(login_id=login_id, password_hash=password_hash.hash(password), role="teacher"))
+                    db.commit()
 
 @app.get("/health")
 def health():
