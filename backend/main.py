@@ -416,9 +416,9 @@ class StudentInput(BaseModel):
 class MonthlyCharacterPointsInput(BaseModel):
     year: int = Field(ge=2000, le=2100)
     month: int = Field(ge=1, le=12)
-    cleanliness_points: int = Field(default=0, ge=0, le=100000)
-    discipline_points: int = Field(default=0, ge=0, le=100000)
-    worship_points: int = Field(default=0, ge=0, le=100000)
+    cleanliness_points: int = Field(default=0, ge=0, le=10)
+    discipline_points: int = Field(default=0, ge=0, le=10)
+    worship_points: int = Field(default=0, ge=0, le=10)
 
 class StudentUpdateInput(BaseModel):
     student_code: str | None = Field(default=None, min_length=1, max_length=80)
