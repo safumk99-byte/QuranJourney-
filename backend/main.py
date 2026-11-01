@@ -625,13 +625,26 @@ def allowed_student_ids(user: User, db: Session) -> set[int] | None:
     return set(db.scalars(select(ParentStudent.student_id).where(ParentStudent.parent_user_id == user.id)).all())
 
 def check_student_access(student_id: int, user: User, db: Session) -> None:
-    student = db.get(Student, student_id)
-    if student is None or not student.is_active:
-        raise HTTPException(status_code=404, detail="Student not found")
+    """Enforce per-student access. Never confirm another parent's student ID exists."""
     if user.role == "teacher":
+        student = db.get(Student, student_id)
+        if student is None or not student.is_active:
+            raise HTTPException(status_code=404, detail="Student not found")
         return
-    if user.role != "parent" or student_id not in (allowed_student_ids(user, db) or set()):
-        raise HTTPException(status_code=403, detail="You cannot access this student's records")
+    if user.role != "parent":
+        raise HTTPException(status_code=403, detail="Student access required")
+    linked = db.scalar(
+        select(ParentStudent.id)
+        .join(Student, Student.id == ParentStudent.student_id)
+        .where(
+            ParentStudent.parent_user_id == user.id,
+            ParentStudent.student_id == student_id,
+            Student.is_active.is_(True),
+        )
+    )
+    if linked is None:
+        # Same response for an unknown ID, inactive student, or another parent's child.
+        raise HTTPException(status_code=404, detail="Student record not found")
 
 def notify_student_parents(db: Session, student_id: int, event_key: str, title: str, message: str, notification_type: str) -> None:
     """Create one in-app notification per linked parent; unique event keys prevent duplicates."""
