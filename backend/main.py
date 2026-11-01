@@ -1285,10 +1285,20 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
         base = daily_required * working_days
         actual = sum(value for entry_day, value in pages_by_date.items() if period_first <= entry_day <= last)
-        required = base + carry
-        carry = max(0.0, required - actual)
+        carry_in = carry
+        required = base + carry_in
+        period_remaining = max(0.0, required - actual)
         if pstart == start:
-            current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(base, 2), "carry_in": round(required - base, 2), "target": round(required, 2), "completed": round(actual, 2), "remaining": round(carry, 2), "working_days": working_days, "status": "Met" if carry <= 0.001 else "Pending"}
+            if kind == "month":
+                known_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= datetime.now(timezone.utc)}
+                total_working_days = sum(1 for offset in range(max(0, (pend - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in known_holidays)
+                full_month_base = daily_required * total_working_days
+                full_month_target = full_month_base + carry_in
+                full_month_remaining = max(0.0, full_month_target - actual)
+                current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(full_month_base, 2), "carry_in": round(carry_in, 2), "target": round(full_month_target, 2), "completed": round(actual, 2), "remaining": round(full_month_remaining, 2), "working_days": working_days, "total_working_days": total_working_days, "status": "Met" if full_month_remaining <= 0.001 else "Pending"}
+            else:
+                current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(base, 2), "carry_in": round(carry_in, 2), "target": round(required, 2), "completed": round(actual, 2), "remaining": round(period_remaining, 2), "working_days": working_days, "total_working_days": working_days, "status": "Met" if period_remaining <= 0.001 else "Pending"}
+        carry = period_remaining
         cursor = next_cursor
     return current
 
