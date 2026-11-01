@@ -1678,6 +1678,9 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
         setattr(row, key, value)
     if "pages" in values:
         adjust_completed_pages(db, student_id, reading_page_count(row.pages) - old_pages)
+    _set_reading_juz_contribution(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
@@ -1690,6 +1693,8 @@ def delete_reading(student_id: int, entry_id: int, user: User = Depends(require_
         raise HTTPException(status_code=404, detail="Reading entry not found")
     adjust_completed_pages(db, student_id, -reading_page_count(row.pages))
     db.delete(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     return Response(status_code=204)
 
@@ -1710,7 +1715,10 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
+    _set_reading_juz_contribution(row)
     db.add(row)
+    db.flush()
+    _sync_student_juz_progress(db, student_id)
     db.commit()
     db.refresh(row)
     return {"id": row.id, "student_id": row.student_id, "date": row.entry_date.isoformat()}
