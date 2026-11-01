@@ -1162,7 +1162,7 @@ def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Que
 
 
 @app.get("/points/leaderboard")
-def points_leaderboard(year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+def points_leaderboard(year: int = Query(default=date.today().year, ge=2000, le=2100), month: int = Query(default=date.today().month, ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     """Rank reading activity points for the selected calendar month; keep older entries as history."""
     month_start = date(year, month, 1)
     month_end = (date(year + 1, 1, 1) - timedelta(days=1)) if month == 12 else (date(year, month + 1, 1) - timedelta(days=1))
@@ -1515,7 +1515,7 @@ def _challenge_session_json(row: ChallengeSession):
         "has_audio": bool(q.audio_data), "audio_type": q.audio_type, "audio_base64": q.audio_data} for q in row.questions]}
 
 @app.get("/challenge/leaderboard")
-def challenge_leaderboard(year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+def challenge_leaderboard(year: int = Query(default=date.today().year, ge=2000, le=2100), month: int = Query(default=date.today().month, ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     """Show confirmed challenge marks for the selected month; preserve all older sessions as history."""
     month_start = date(year, month, 1)
     month_end = (date(year + 1, 1, 1) - timedelta(days=1)) if month == 12 else (date(year, month + 1, 1) - timedelta(days=1))
