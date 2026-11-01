@@ -1162,9 +1162,10 @@ def monthly_points_ranking(year: int = Query(ge=2000, le=2100), month: int = Que
 
 
 @app.get("/points/leaderboard")
-def points_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    """Rank reading activity points for the current calendar month; keep older entries as history."""
-    month_start, month_end = current_month_bounds()
+def points_leaderboard(year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Rank reading activity points for the selected calendar month; keep older entries as history."""
+    month_start = date(year, month, 1)
+    month_end = (date(year + 1, 1, 1) - timedelta(days=1)) if month == 12 else (date(year, month + 1, 1) - timedelta(days=1))
     active_students = db.scalars(select(Student).where(Student.is_active.is_(True))).all()
     totals = {student.id: {"new_lesson_points": 0.0, "recent_revision_points": 0.0, "general_revision_points": 0.0} for student in active_students}
     rows = db.scalars(select(ReadingEntry).join(Student, ReadingEntry.student_id == Student.id).where(
@@ -1514,9 +1515,10 @@ def _challenge_session_json(row: ChallengeSession):
         "has_audio": bool(q.audio_data), "audio_type": q.audio_type, "audio_base64": q.audio_data} for q in row.questions]}
 
 @app.get("/challenge/leaderboard")
-def challenge_leaderboard(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    """Show only current-month confirmed challenge marks; preserve all older sessions as history."""
-    month_start, month_end = current_month_bounds()
+def challenge_leaderboard(year: int = Query(ge=2000, le=2100), month: int = Query(ge=1, le=12), user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Show confirmed challenge marks for the selected month; preserve all older sessions as history."""
+    month_start = date(year, month, 1)
+    month_end = (date(year + 1, 1, 1) - timedelta(days=1)) if month == 12 else (date(year, month + 1, 1) - timedelta(days=1))
     rows = db.execute(
         select(Student, ChallengeSession)
         .join(ChallengeSession, ChallengeSession.student_id == Student.id)
