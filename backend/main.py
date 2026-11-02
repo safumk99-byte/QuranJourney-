@@ -674,7 +674,7 @@ def _delete_cloudinary_photo(public_id: str | None) -> None:
 
 app = FastAPI(title="Quran Journey API", version="0.1.0")
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "https://safumk99-byte.github.io").split(",") if x.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 
 def current_month_bounds(reference: date | None = None) -> tuple[date, date]:
     """Return the inclusive date range for the current calendar month.
