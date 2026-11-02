@@ -349,6 +349,7 @@ class ExamSaveInput(BaseModel):
     end_page: int | None = Field(default=None, ge=1, le=604)
     confirmed: bool = False
     allow_confirmed_edit: bool = False
+    session_id: int | None = Field(default=None, gt=0)
     questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -2116,7 +2117,12 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
     _challenge_student(student_id, user, db)
     if data.date != exam_date:
         raise HTTPException(status_code=422, detail="Exam date does not match URL")
-    row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date, ExamSession.exam_type == data.exam_type).order_by(ExamSession.id.desc()))
+    if data.session_id is not None:
+        row = db.scalar(select(ExamSession).where(ExamSession.id == data.session_id, ExamSession.student_id == student_id))
+        if row is None or row.exam_date != exam_date or row.exam_type != data.exam_type:
+            raise HTTPException(status_code=404, detail="Exam history record not found for editing.")
+    else:
+        row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date, ExamSession.exam_type == data.exam_type).order_by(ExamSession.id.desc()))
     if row is None:
         row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz), end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz), monthly_source=data.monthly_source, start_page=data.start_page, end_page=data.end_page)
         db.add(row)
