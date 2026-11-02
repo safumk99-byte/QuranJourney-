@@ -77,7 +77,7 @@ async function historyLoad(){
  if(!sid())return msg('Select a student first.','error');
  try{
   hist=await api('/students/'+sid()+'/exam/sessions');
-  $('history').innerHTML=hist.length?'<table><thead><tr><th>Type</th><th>Date</th><th>Range</th><th>Questions</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>'+hist.map((h,i)=>'<tr><td>'+esc(({monthly:'Monthly',juz:'Juz Completion',semester:'Semester'}[h.exam_type]||'Monthly'))+'</td><td>'+esc(h.date)+'</td><td>'+(h.start_juz?'Juz '+h.start_juz+'–'+h.end_juz:'—')+'</td><td>'+h.questions.length+'</td><td>'+h.total_marks+'</td><td>'+(h.confirmed?'Confirmed':'Draft')+'</td><td><button class="mini-btn" data-load="'+i+'">Load</button></td></tr>').join('')+'</tbody></table>':'No exams saved yet.';
+  $('history').innerHTML=hist.length?'<table><thead><tr><th>Type</th><th>Date</th><th>Range</th><th>Questions</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>'+hist.map((h,i)=>'<tr><td>'+esc(({monthly:'Monthly',juz:'Juz Completion',semester:'Semester'}[h.exam_type]||'Monthly'))+'</td><td>'+esc(h.date)+'</td><td>'+(h.start_juz?'Juz '+h.start_juz+'–'+h.end_juz:(h.exam_type==='monthly'?(h.monthly_source==='page_range'?'Pages '+h.start_page+'–'+h.end_page:(h.monthly_source==='both'?'New Lesson + Pages '+h.start_page+'–'+h.end_page:'New Lesson')):'—'))+'</td><td>'+h.questions.length+'</td><td>'+h.total_marks+'</td><td>'+(h.confirmed?'Confirmed':'Draft')+'</td><td><button class="mini-btn" data-load="'+i+'">Load</button></td></tr>').join('')+'</tbody></table>':'No exams saved yet.';
  }catch(e){msg(e.message||'History failed','error')}
 }
 $('history').addEventListener('click',e=>{
