@@ -2082,7 +2082,40 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
     refs = list(refs_by_key.values())
     if len(refs) < data.question_count:
         raise HTTPException(status_code=400, detail=f"Only {len(refs)} unique ayahs are available in the selected range. Reduce the question count to {len(refs)} or fewer.")
-    chosen = random.SystemRandom().sample(refs, data.question_count)
+    # Keep generated questions at least half a Mushaf page apart.
+    # Convert each ayah's global ordinal to a fractional page coordinate so
+    # spacing works consistently across New Lesson, page-range, and Juz exams.
+    def _ayah_page_position(ref):
+        ordinal = _ayah_ordinal(int(ref["surah"]), int(ref["ayah"]))
+        for page_no, page_start, page_end in _QURAN_PAGE_INTERVALS:
+            if page_start <= ordinal <= page_end:
+                ayah_count = page_end - page_start + 1
+                return page_no + ((ordinal - page_start) + 0.5) / ayah_count
+        return None
+
+    rng = random.SystemRandom()
+    shuffled_refs = list(refs)
+    rng.shuffle(shuffled_refs)
+    chosen = []
+    chosen_positions = []
+    for candidate in shuffled_refs:
+        position = _ayah_page_position(candidate[0])
+        if position is None:
+            continue
+        if all(abs(position - existing) >= 0.5 for existing in chosen_positions):
+            chosen.append(candidate)
+            chosen_positions.append(position)
+            if len(chosen) == data.question_count:
+                break
+    if len(chosen) < data.question_count:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Only {len(chosen)} questions can be generated with at least "
+                f"half-page spacing in this selected range. Reduce the question "
+                f"count to {len(chosen)} or expand the selected range."
+            ),
+        )
     if row:
         row.questions.clear()
         db.flush()
