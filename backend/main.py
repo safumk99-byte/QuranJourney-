@@ -242,6 +242,9 @@ class ExamSession(Base):
     exam_type: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
     start_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     end_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monthly_source: Mapped[str] = mapped_column(String(20), default="new_lesson", nullable=False)
+    start_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     questions: Mapped[list["ExamQuestion"]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="ExamQuestion.question_no")
 
@@ -304,12 +307,17 @@ class ExamGenerateInput(BaseModel):
     start_juz: int | None = Field(default=None, ge=1, le=30)
     end_juz: int | None = Field(default=None, ge=1, le=30)
     question_count: int = Field(ge=1, le=100)
+    monthly_source: str = Field(default="new_lesson", pattern="^(new_lesson|page_range|both)$")
+    start_page: int | None = Field(default=None, ge=1, le=604)
+    end_page: int | None = Field(default=None, ge=1, le=604)
 
     @model_validator(mode="after")
     def validate_exam_scope(self):
         if self.exam_type == "monthly":
             if self.year is None or self.month is None:
                 raise ValueError("Monthly Exam requires year and month.")
+            if self.monthly_source in ("page_range", "both") and (self.start_page is None or self.end_page is None or self.end_page < self.start_page):
+                raise ValueError("Select a valid Quran page range (1–604).")
         elif self.exam_type == "juz":
             if self.juz_no is None:
                 raise ValueError("Select one Juz for Juz Completion Exam.")
@@ -336,8 +344,18 @@ class ExamSaveInput(BaseModel):
     juz_no: int | None = Field(default=None, ge=1, le=30)
     start_juz: int | None = Field(default=None, ge=1, le=30)
     end_juz: int | None = Field(default=None, ge=1, le=30)
+    monthly_source: str = Field(default="new_lesson", pattern="^(new_lesson|page_range|both)$")
+    start_page: int | None = Field(default=None, ge=1, le=604)
+    end_page: int | None = Field(default=None, ge=1, le=604)
     confirmed: bool = False
     questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_monthly_page_range(self):
+        if self.exam_type == "monthly" and self.monthly_source in ("page_range", "both"):
+            if self.start_page is None or self.end_page is None or self.end_page < self.start_page:
+                raise ValueError("Select a valid Quran page range (1–604).")
+        return self
 
 class TeacherNotificationInput(BaseModel):
     student_id: int | None = Field(default=None, gt=0)
@@ -950,7 +968,7 @@ def startup() -> None:
             },
             "reading_entries": {"legacy_id": "VARCHAR(120) NULL", "start_surah": "INTEGER NULL", "start_ayah": "INTEGER NULL", "end_surah": "INTEGER NULL", "end_ayah": "INTEGER NULL", "recent_start_surah": "INTEGER NULL", "recent_start_ayah": "INTEGER NULL", "recent_end_surah": "INTEGER NULL", "recent_end_ayah": "INTEGER NULL", "general_start_surah": "INTEGER NULL", "general_start_ayah": "INTEGER NULL", "general_end_surah": "INTEGER NULL", "general_end_ayah": "INTEGER NULL", "recent_pages": "VARCHAR(20) NULL", "general_pages": "VARCHAR(20) NULL", "new_lesson": "TEXT NULL", "pages": "VARCHAR(200) NULL", "recent_revision": "TEXT NULL", "general_revision": "TEXT NULL", "remarks": "TEXT NULL", "juz_progress_data": "TEXT NULL"},
             "attendance": {"legacy_id": "VARCHAR(120) NULL", "period": "INTEGER NOT NULL DEFAULT 1"},
-            "exam_sessions": {"exam_type": "VARCHAR(20) NOT NULL DEFAULT 'monthly'", "start_juz": "INTEGER NULL", "end_juz": "INTEGER NULL"},
+            "exam_sessions": {"exam_type": "VARCHAR(20) NOT NULL DEFAULT 'monthly'", "start_juz": "INTEGER NULL", "end_juz": "INTEGER NULL", "monthly_source": "VARCHAR(20) NOT NULL DEFAULT 'new_lesson'", "start_page": "INTEGER NULL", "end_page": "INTEGER NULL"},
         }
         with engine.begin() as conn:
             for table, columns in additive.items():
@@ -1927,6 +1945,7 @@ def _exam_json(row: ExamSession):
     return {
         "id": row.id, "date": row.exam_date.isoformat(), "exam_type": row.exam_type or "monthly",
         "start_juz": row.start_juz, "end_juz": row.end_juz,
+        "monthly_source": row.monthly_source or "new_lesson", "start_page": row.start_page, "end_page": row.end_page,
         "confirmed": row.confirmed, "total_marks": row.total_marks,
         "questions": [{
             "text": q.question_text, "expected": q.expected_answer or "",
@@ -1963,6 +1982,22 @@ def exam_monthly_learning(
         "pages": row.pages or "0", "new_lesson": row.new_lesson or "",
     } for row in rows]
 
+@app.get("/students/{student_id}/exam/monthly-pages")
+def exam_monthly_pages(
+    student_id: int,
+    start_page: int = Query(ge=1, le=604),
+    end_page: int = Query(ge=1, le=604),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the Quran ayah coverage for a standard 604-page Mushaf range."""
+    _challenge_student(student_id, user, db)
+    if end_page < start_page:
+        raise HTTPException(status_code=422, detail="End page must be greater than or equal to Start page.")
+    return {"start_page": start_page, "end_page": end_page, "ayah_count": sum(
+        end - start + 1 for page, start, end in _QURAN_PAGE_INTERVALS if start_page <= page <= end_page
+    )}
+
 @app.get("/students/{student_id}/exam/sessions")
 def exam_sessions(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     _challenge_student(student_id, user, db)
@@ -1985,29 +2020,48 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
 
     refs_by_key = {}
     if data.exam_type == "monthly":
-        month_start = date(data.year, data.month, 1)
-        month_end = date(data.year + 1, 1, 1) if data.month == 12 else date(data.year, data.month + 1, 1)
-        lessons = db.scalars(select(ReadingEntry).where(
-            ReadingEntry.student_id == student_id,
-            ReadingEntry.entry_date >= month_start,
-            ReadingEntry.entry_date < month_end,
-            ReadingEntry.start_surah.is_not(None),
-            ReadingEntry.start_ayah.is_not(None),
-            ReadingEntry.end_surah.is_not(None),
-            ReadingEntry.end_ayah.is_not(None),
-        ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
-        if not lessons:
-            raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
-        for lesson in lessons:
-            first = (lesson.start_surah, lesson.start_ayah)
-            last = (lesson.end_surah, lesson.end_ayah)
-            for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
-                for ref in _surah_ayah_refs(surah_no):
-                    key = (ref["surah"], ref["ayah"])
-                    if first <= key <= last:
-                        refs_by_key[key] = (ref, f"New Lesson {lesson.entry_date.isoformat()}")
+        if data.monthly_source in ("new_lesson", "both"):
+            month_start = date(data.year, data.month, 1)
+            month_end = date(data.year + 1, 1, 1) if data.month == 12 else date(data.year, data.month + 1, 1)
+            lessons = db.scalars(select(ReadingEntry).where(
+                ReadingEntry.student_id == student_id,
+                ReadingEntry.entry_date >= month_start,
+                ReadingEntry.entry_date < month_end,
+                ReadingEntry.start_surah.is_not(None),
+                ReadingEntry.start_ayah.is_not(None),
+                ReadingEntry.end_surah.is_not(None),
+                ReadingEntry.end_ayah.is_not(None),
+            ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+            for lesson in lessons:
+                first = (lesson.start_surah, lesson.start_ayah)
+                last = (lesson.end_surah, lesson.end_ayah)
+                for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
+                    for ref in _surah_ayah_refs(surah_no):
+                        key = (ref["surah"], ref["ayah"])
+                        if first <= key <= last:
+                            refs_by_key[key] = (ref, f"New Lesson {lesson.entry_date.isoformat()}")
+            if data.monthly_source == "new_lesson" and not refs_by_key:
+                raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
+        if data.monthly_source in ("page_range", "both"):
+            if data.start_page is None or data.end_page is None or data.end_page < data.start_page:
+                raise HTTPException(status_code=422, detail="Select a valid Quran page range (1–604).")
+            first_interval = next((x for x in _QURAN_PAGE_INTERVALS if x[0] == data.start_page), None)
+            last_interval = next((x for x in _QURAN_PAGE_INTERVALS if x[0] == data.end_page), None)
+            if not first_interval or not last_interval:
+                raise HTTPException(status_code=422, detail="Quran page range is not available in the page map.")
+            first_ordinal, last_ordinal = first_interval[1], last_interval[2]
+            cumulative = 0
+            for surah_no, ayah_count in enumerate(SURAH_AYAH_COUNTS, start=1):
+                surah_start, surah_end = cumulative, cumulative + ayah_count - 1
+                if surah_end >= first_ordinal and surah_start <= last_ordinal:
+                    for ref in _surah_ayah_refs(surah_no):
+                        ordinal = surah_start + ref["ayah"] - 1
+                        if first_ordinal <= ordinal <= last_ordinal:
+                            key = (ref["surah"], ref["ayah"])
+                            refs_by_key[key] = (ref, f"Pages {data.start_page}–{data.end_page}")
+                cumulative += ayah_count
         if not refs_by_key:
-            raise HTTPException(status_code=400, detail="The selected month has no valid New Lesson ayahs to use.")
+            raise HTTPException(status_code=400, detail="No valid Quran ayahs were found in the selected monthly exam source.")
     else:
         start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
         end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
@@ -2035,12 +2089,17 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
     else:
         row = ExamSession(student_id=student_id, exam_date=data.date, exam_type=data.exam_type,
                           start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz),
-                          end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz), confirmed=False, total_marks=0)
+                          end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz),
+                          monthly_source=data.monthly_source, start_page=data.start_page, end_page=data.end_page,
+                          confirmed=False, total_marks=0)
         db.add(row)
         db.flush()
     row.exam_type = data.exam_type
     row.start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
     row.end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
+    row.monthly_source = data.monthly_source if data.exam_type == "monthly" else "new_lesson"
+    row.start_page = data.start_page if data.exam_type == "monthly" else None
+    row.end_page = data.end_page if data.exam_type == "monthly" else None
     for idx, (ref, scope_label) in enumerate(chosen, start=1):
         row.questions.append(ExamQuestion(
             question_no=idx, question_text=ref["text"],
@@ -2058,7 +2117,7 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
         raise HTTPException(status_code=422, detail="Exam date does not match URL")
     row = db.scalar(select(ExamSession).where(ExamSession.student_id == student_id, ExamSession.exam_date == exam_date, ExamSession.exam_type == data.exam_type).order_by(ExamSession.id.desc()))
     if row is None:
-        row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz), end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz))
+        row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz), end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz), monthly_source=data.monthly_source, start_page=data.start_page, end_page=data.end_page)
         db.add(row)
         db.flush()
     if row.confirmed:
@@ -2066,6 +2125,9 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
     row.exam_type = data.exam_type
     row.start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
     row.end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
+    row.monthly_source = data.monthly_source if data.exam_type == "monthly" else "new_lesson"
+    row.start_page = data.start_page if data.exam_type == "monthly" else None
+    row.end_page = data.end_page if data.exam_type == "monthly" else None
     row.questions.clear()
     db.flush()
     total = 0
