@@ -350,6 +350,13 @@ class ExamSaveInput(BaseModel):
     confirmed: bool = False
     questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
 
+    @model_validator(mode="after")
+    def validate_monthly_page_range(self):
+        if self.exam_type == "monthly" and self.monthly_source in ("page_range", "both"):
+            if self.start_page is None or self.end_page is None or self.end_page < self.start_page:
+                raise ValueError("Select a valid Quran page range (1–604).")
+        return self
+
 class TeacherNotificationInput(BaseModel):
     student_id: int | None = Field(default=None, gt=0)
     title: str = Field(min_length=2, max_length=180)
