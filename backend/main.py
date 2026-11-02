@@ -2330,3 +2330,31 @@ def save_challenge_audio(student_id: int, challenge_date: date, question_no: int
     db.commit()
     return {"saved": True, "question_no": question_no}
 
+
+
+@app.get("/teacher/reports")
+def teacher_reports(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Teacher-only consolidated reporting data. Parent accounts cannot access this endpoint."""
+    students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.name)).all()
+    student_ids = [s.id for s in students]
+    if not student_ids:
+        return {"students": [], "reading": [], "attendance": [], "marks": [], "exams": [], "challenges": [], "discipline": [], "character": [], "notifications": []}
+    reading = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(student_ids)).order_by(ReadingEntry.entry_date.desc(), ReadingEntry.id.desc())).all()
+    attendance = db.scalars(select(Attendance).where(Attendance.student_id.in_(student_ids)).order_by(Attendance.attendance_date.desc(), Attendance.period)).all()
+    marks = db.scalars(select(DailyMark).where(DailyMark.student_id.in_(student_ids)).order_by(DailyMark.mark_date.desc())).all()
+    exams = db.scalars(select(ExamSession).where(ExamSession.student_id.in_(student_ids)).order_by(ExamSession.exam_date.desc(), ExamSession.id.desc())).all()
+    challenges = db.scalars(select(ChallengeSession).where(ChallengeSession.student_id.in_(student_ids)).order_by(ChallengeSession.challenge_date.desc())).all()
+    discipline = db.scalars(select(DisciplineEntry).where(DisciplineEntry.student_id.in_(student_ids)).order_by(DisciplineEntry.incident_date.desc())).all()
+    character = db.scalars(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id.in_(student_ids)).order_by(MonthlyCharacterPoints.year.desc(), MonthlyCharacterPoints.month.desc())).all()
+    notifications = db.scalars(select(ParentNotification).where(ParentNotification.student_id.in_(student_ids)).order_by(ParentNotification.created_at.desc())).all()
+    return {
+        "students": [{"id": s.id, "name": s.name, "class_name": s.class_name or "Unassigned class", "student_code": s.student_code, "completed_pages": s.completed_pages, "total_pages": s.total_pages} for s in students],
+        "reading": [{"student_id": r.student_id, "date": r.entry_date.isoformat(), "new_lesson": r.new_lesson or "", "pages": r.pages or "0", "recent_revision": r.recent_revision or "", "recent_pages": r.recent_pages or "0", "general_revision": r.general_revision or "", "general_pages": r.general_pages or "0", "start_surah": r.start_surah, "start_ayah": r.start_ayah, "end_surah": r.end_surah, "end_ayah": r.end_ayah, "recent_start_surah": r.recent_start_surah, "recent_start_ayah": r.recent_start_ayah, "recent_end_surah": r.recent_end_surah, "recent_end_ayah": r.recent_end_ayah, "general_start_surah": r.general_start_surah, "general_start_ayah": r.general_start_ayah, "general_end_surah": r.general_end_surah, "general_end_ayah": r.general_end_ayah, "remarks": r.remarks} for r in reading],
+        "attendance": [{"student_id": r.student_id, "date": r.attendance_date.isoformat(), "period": r.period, "status": r.status, "remarks": r.remarks or ""} for r in attendance],
+        "marks": [{"student_id": r.student_id, "date": r.mark_date.isoformat(), "points": r.points, "s": r.score_s, "ms": r.score_ms, "mu": r.score_mu, "remarks": r.remarks or ""} for r in marks],
+        "exams": [{"student_id": r.student_id, **_exam_json(r)} for r in exams],
+        "challenges": [{"student_id": r.student_id, "date": r.challenge_date.isoformat(), "confirmed": r.confirmed, "score": r.score, "q": [{"text": q.question_text, "review": q.review_score, "submitted": q.submitted} for q in r.questions]} for r in challenges],
+        "discipline": [{"student_id": r.student_id, "incident_date": r.incident_date.isoformat(), "reason": r.reason, "points_deducted": r.points_deducted, "is_reversed": r.is_reversed, "notes": r.notes or ""} for r in discipline],
+        "character": [{"student_id": r.student_id, "year": r.year, "month": r.month, "cleanliness_points": r.cleanliness_points, "discipline_points": r.discipline_points, "worship_points": r.worship_points} for r in character],
+        "notifications": [{"student_id": r.student_id, "title": r.title, "type": r.notification_type, "created_at": r.created_at.isoformat(), "read": bool(r.read_at)} for r in notifications],
+    }
