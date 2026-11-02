@@ -25,7 +25,7 @@ function initJuz(){
 }
 async function students(){try{let a=await api('/students');$('student').innerHTML='<option value="">Select student</option>'+a.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' · '+esc(s.class_name||'No class')+'</option>').join('')}catch(e){msg(e.message||'Cannot load students','error')}}
 function renderQ(){ $('questions').innerHTML=qs.map((q,i)=>'<article class="q"><b>Question '+(i+1)+'</b><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><p class="muted">'+esc(q.expected||'')+'</p><div class="grid"><label>Maximum marks<input type="number" min="1" max="1000" data-max="'+i+'" value="'+(q.max_marks||5)+'"></label><label>Marks awarded<input type="number" min="0" max="'+(q.max_marks||5)+'" data-award="'+i+'" value="'+(q.awarded_marks??'')+'" placeholder="Teacher marks"></label></div><label>Teacher note<textarea data-note="'+i+'" rows="2">'+esc(q.note||'')+'</textarea></label></article>').join('')}
-function readQ(){qs=qs.map((q,i)=>({...q,max_marks:Number($('[data-max="'+i+'"]').value),awarded_marks:$('[data-award="'+i+'"]').value===''?null:Number($('[data-award="'+i+'"]').value),note:$('[data-note="'+i+'"]').value.trim()}))}
+function readQ(){qs=qs.map((q,i)=>{const max=document.querySelector('[data-max="'+i+'"]'),award=document.querySelector('[data-award="'+i+'"]'),note=document.querySelector('[data-note="'+i+'"]');if(!max||!award||!note)throw new Error('Question '+(i+1)+' fields are missing. Regenerate the questions and try again.');return {...q,max_marks:Number(max.value),awarded_marks:award.value===''?null:Number(award.value),note:note.value.trim()}})}
 function selectedRange(){return type()==='juz'?{juz_no:Number($('singleJuz').value)}:{start_juz:Number($('startJuz').value),end_juz:Number($('endJuz').value)}}
 async function loadRanges(){
  if(!sid())return msg('Select a student first.','error');
@@ -89,7 +89,7 @@ $('history').addEventListener('click',e=>{
  if(type()==='monthly'){$('month').value=h.date.slice(0,7);$('monthlySource').value=h.monthly_source||'new_lesson';$('startPage').value=h.start_page||'';$('endPage').value=h.end_page||'';updateMonthlySource();}
  qs=h.questions.map(q=>({...q}));renderQ();msg(h.confirmed?'Confirmed exam loaded for review; server will prevent edits.':'Draft loaded.','success');
 });
-$('questions').addEventListener('input',e=>{if(e.target.matches('[data-max]')){let i=e.target.dataset.max,a=$('[data-award="'+i+'"]');a.max=e.target.value;if(a.value!==''&&Number(a.value)>Number(e.target.value))a.value=e.target.value}});
+$('questions').addEventListener('input',e=>{if(e.target.matches('[data-max]')){let i=e.target.dataset.max,a=document.querySelector('[data-award="'+i+'"]');if(!a)return;a.max=e.target.value;if(a.value!==''&&Number(a.value)>Number(e.target.value))a.value=e.target.value}});
 $('student').addEventListener('change',()=>{qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';$('history').innerHTML='Select View Exam History.'});
 $('examType').addEventListener('change',()=>{setupType();qs=[];$('questions').innerHTML='';$('ranges').innerHTML=''});
 $('monthlySource').addEventListener('change',()=>{updateMonthlySource();$('ranges').innerHTML='';qs=[];$('questions').innerHTML=''});
