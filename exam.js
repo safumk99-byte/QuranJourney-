@@ -15,7 +15,10 @@ function setupType(){
  setVisible('semesterRangeField',semester);
  $('rangesBtn').textContent=monthly?'Load Monthly New Lessons':single?'Check Selected Juz':'Check Semester Juz Range';
  $('month').required=monthly;
+ $('monthlySourceField').hidden=!monthly;$('monthlySourceField').style.display=monthly?'block':'none';updateMonthlySource();
 }
+function updateMonthlySource(){const show=type()==='monthly'&&['page_range','both'].includes($('monthlySource').value);$('pageRangeFields').hidden=!show;$('pageRangeFields').style.display=show?'grid':'none';$('startPage').required=show;$('endPage').required=show;}
+function monthlyPageRange(){const start=Number($('startPage').value),end=Number($('endPage').value);if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end>604||end<start)throw new Error('Enter a valid Quran page range from 1 to 604.');return {start_page:start,end_page:end};}
 function initJuz(){
  for(const id of ['singleJuz','startJuz','endJuz'])$(id).innerHTML=Array.from({length:30},(_,i)=>'<option value="'+(i+1)+'">Juz '+(i+1)+'</option>').join('');
  $('singleJuz').value='1';$('startJuz').value='1';$('endJuz').value='5';
@@ -28,6 +31,8 @@ async function loadRanges(){
  if(!sid())return msg('Select a student first.','error');
  if(type()==='monthly'){
   const v=$('month').value;if(!v)return msg('Select exam month first.','error');
+  const source=$('monthlySource').value;
+  if(source==='page_range'||source==='both'){try{const p=monthlyPageRange();const preview=await api('/students/'+sid()+'/exam/monthly-pages?start_page='+p.start_page+'&end_page='+p.end_page);$('ranges').innerHTML='<div class="range"><b>Quran Page Range:</b> Pages '+p.start_page+'–'+p.end_page+' · '+preview.ayah_count+' ayahs'+(source==='both'?' + New Lesson Progress':'')+'</div>';}catch(e){msg(e.message||'Invalid page range','error');return}if(source==='page_range')return;}
   const [year,month]=v.split('-').map(Number);
   try{ranges=await api('/students/'+sid()+'/exam/monthly-learning?year='+year+'&month='+month);
    $('ranges').innerHTML=ranges.length?ranges.map(r=>'<div class="range"><b>'+esc(r.date)+'</b> · Surah '+r.start_surah+':'+r.start_ayah+' – '+r.end_surah+':'+r.end_ayah+' · '+esc(r.pages)+' pages</div>').join(''):'ഈ മാസത്തിൽ New Lesson രേഖകളൊന്നും കണ്ടെത്തിയില്ല.';
@@ -50,7 +55,8 @@ async function generate(){
    const mv=$('month').value;if(!mv)return msg('Select exam month.','error');
    const [year,month]=mv.split('-').map(Number);
    if($('date').value.slice(0,7)!==mv)return msg('Exam date must be within the selected month.','error');
-   payload.year=year;payload.month=month;
+   payload.year=year;payload.month=month;payload.monthly_source=$('monthlySource').value;
+   if(payload.monthly_source==='page_range'||payload.monthly_source==='both')Object.assign(payload,monthlyPageRange());
   }else Object.assign(payload,selectedRange());
   const r=await api('/students/'+sid()+'/exam/generate',{method:'POST',body:JSON.stringify(payload)});
   qs=r.questions||[];renderQ();msg(qs.length+' questions generated. Set marks and save.','success');
@@ -62,7 +68,7 @@ async function save(){
   readQ();
   for(let i=0;i<qs.length;i++){let q=qs[i];if(!Number.isInteger(q.max_marks)||q.max_marks<1||q.max_marks>1000)return msg('Question '+(i+1)+': maximum marks must be 1–1000.','error');if(q.awarded_marks!==null&&(!Number.isInteger(q.awarded_marks)||q.awarded_marks<0||q.awarded_marks>q.max_marks))return msg('Question '+(i+1)+': awarded marks exceed the allowed range.','error');if($('confirm').value==='true'&&q.awarded_marks===null)return msg('Enter marks for every question before confirming.','error')}
   const meta={date:$('date').value,exam_type:type(),confirmed:$('confirm').value==='true',questions:qs};
-  if(type()!=='monthly')Object.assign(meta,selectedRange());
+  if(type()==='monthly'){meta.monthly_source=$('monthlySource').value;if(meta.monthly_source==='page_range'||meta.monthly_source==='both')Object.assign(meta,monthlyPageRange());}else Object.assign(meta,selectedRange());
   let r=await api('/students/'+sid()+'/exam/sessions/'+$('date').value,{method:'PUT',body:JSON.stringify(meta)});
   qs=r.questions||[];renderQ();msg(r.confirmed?'Exam confirmed. Total marks: '+r.total_marks:'Draft exam saved.','success');await historyLoad();
  }catch(e){msg(e.message||'Save failed','error')}
@@ -78,12 +84,13 @@ $('history').addEventListener('click',e=>{
  let b=e.target.closest('[data-load]');if(!b)return;let h=hist[Number(b.dataset.load)];
  $('date').value=h.date;$('confirm').value=String(h.confirmed);$('examType').value=h.exam_type||'monthly';setupType();
  if(h.start_juz){if(type()==='juz')$('singleJuz').value=String(h.start_juz);else{$('startJuz').value=String(h.start_juz);$('endJuz').value=String(h.end_juz)}}
- if(type()==='monthly')$('month').value=h.date.slice(0,7);
+ if(type()==='monthly'){$('month').value=h.date.slice(0,7);$('monthlySource').value=h.monthly_source||'new_lesson';$('startPage').value=h.start_page||'';$('endPage').value=h.end_page||'';updateMonthlySource();}
  qs=h.questions.map(q=>({...q}));renderQ();msg(h.confirmed?'Confirmed exam loaded for review; server will prevent edits.':'Draft loaded.','success');
 });
 $('questions').addEventListener('input',e=>{if(e.target.matches('[data-max]')){let i=e.target.dataset.max,a=$('[data-award="'+i+'"]');a.max=e.target.value;if(a.value!==''&&Number(a.value)>Number(e.target.value))a.value=e.target.value}});
 $('student').addEventListener('change',()=>{qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';$('history').innerHTML='Select View Exam History.'});
 $('examType').addEventListener('change',()=>{setupType();qs=[];$('questions').innerHTML='';$('ranges').innerHTML=''});
+$('monthlySource').addEventListener('change',()=>{updateMonthlySource();$('ranges').innerHTML='';qs=[];$('questions').innerHTML=''});
 $('rangesBtn').onclick=loadRanges;$('historyBtn').onclick=historyLoad;$('generate').onclick=generate;$('save').onclick=save;
 $('date').value=today();$('month').value=today().slice(0,7);initJuz();setupType();
 $('month').addEventListener('change',()=>{const m=$('month').value;if(m)$('date').value=m+'-01';$('ranges').innerHTML='';qs=[];$('questions').innerHTML=''});
