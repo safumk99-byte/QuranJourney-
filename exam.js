@@ -69,7 +69,7 @@ async function save(){
  try{
   readQ();
   for(let i=0;i<qs.length;i++){let q=qs[i];if(!Number.isInteger(q.max_marks)||q.max_marks<1||q.max_marks>1000)return msg('Question '+(i+1)+': maximum marks must be 1–1000.','error');if(q.awarded_marks!==null&&(!Number.isInteger(q.awarded_marks)||q.awarded_marks<0||q.awarded_marks>q.max_marks))return msg('Question '+(i+1)+': awarded marks exceed the allowed range.','error');if($('confirm').value==='true'&&q.awarded_marks===null)return msg('Enter marks for every question before confirming.','error')}
-  const meta={date:$('date').value,exam_type:type(),confirmed:$('confirm').value==='true',allow_confirmed_edit:editingExamId!==null,questions:qs};
+  const meta={date:$('date').value,exam_type:type(),confirmed:$('confirm').value==='true',allow_confirmed_edit:editingExamId!==null,session_id:editingExamId,questions:qs};
   if(type()==='monthly'){meta.monthly_source=$('monthlySource').value;if(meta.monthly_source==='page_range'||meta.monthly_source==='both')Object.assign(meta,monthlyPageRange());}else Object.assign(meta,selectedRange());
   let r=await api('/students/'+sid()+'/exam/sessions/'+$('date').value,{method:'PUT',body:JSON.stringify(meta)});
   qs=r.questions||[];renderQ();editingExamId=null;$('date').disabled=false;$('examType').disabled=false;msg(r.confirmed?'Exam confirmed. Total marks: '+r.total_marks:'Draft exam saved.','success');await historyLoad();
