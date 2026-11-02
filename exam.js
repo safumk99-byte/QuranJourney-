@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id),A=window.QuranJourneyAuth;
 const today=()=>{let d=new Date();return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,10)};
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let qs=[],ranges=[],hist=[];
+let qs=[],ranges=[],hist=[],editingExamId=null;
 const type=()=> $('examType').value;
 function msg(t,k=''){ $('message').innerHTML=t?'<div class="message '+k+'">'+esc(t)+'</div>':''}
 const sid=()=> $('student').value;
@@ -69,28 +69,32 @@ async function save(){
  try{
   readQ();
   for(let i=0;i<qs.length;i++){let q=qs[i];if(!Number.isInteger(q.max_marks)||q.max_marks<1||q.max_marks>1000)return msg('Question '+(i+1)+': maximum marks must be 1–1000.','error');if(q.awarded_marks!==null&&(!Number.isInteger(q.awarded_marks)||q.awarded_marks<0||q.awarded_marks>q.max_marks))return msg('Question '+(i+1)+': awarded marks exceed the allowed range.','error');if($('confirm').value==='true'&&q.awarded_marks===null)return msg('Enter marks for every question before confirming.','error')}
-  const meta={date:$('date').value,exam_type:type(),confirmed:$('confirm').value==='true',questions:qs};
+  const meta={date:$('date').value,exam_type:type(),confirmed:$('confirm').value==='true',allow_confirmed_edit:editingExamId!==null,questions:qs};
   if(type()==='monthly'){meta.monthly_source=$('monthlySource').value;if(meta.monthly_source==='page_range'||meta.monthly_source==='both')Object.assign(meta,monthlyPageRange());}else Object.assign(meta,selectedRange());
   let r=await api('/students/'+sid()+'/exam/sessions/'+$('date').value,{method:'PUT',body:JSON.stringify(meta)});
-  qs=r.questions||[];renderQ();msg(r.confirmed?'Exam confirmed. Total marks: '+r.total_marks:'Draft exam saved.','success');await historyLoad();
+  qs=r.questions||[];renderQ();editingExamId=null;$('date').disabled=false;$('examType').disabled=false;msg(r.confirmed?'Exam confirmed. Total marks: '+r.total_marks:'Draft exam saved.','success');await historyLoad();
  }catch(e){msg(e.message||'Save failed','error')}
 }
 async function historyLoad(){
  if(!sid())return msg('Select a student first.','error');
  try{
   hist=await api('/students/'+sid()+'/exam/sessions');
-  $('history').innerHTML=hist.length?'<table><thead><tr><th>Type</th><th>Date</th><th>Range</th><th>Questions</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>'+hist.map((h,i)=>'<tr><td>'+esc(({monthly:'Monthly',juz:'Juz Completion',semester:'Semester'}[h.exam_type]||'Monthly'))+'</td><td>'+esc(h.date)+'</td><td>'+(h.start_juz?'Juz '+h.start_juz+'–'+h.end_juz:(h.exam_type==='monthly'?(h.monthly_source==='page_range'?'Pages '+h.start_page+'–'+h.end_page:(h.monthly_source==='both'?'New Lesson + Pages '+h.start_page+'–'+h.end_page:'New Lesson')):'—'))+'</td><td>'+h.questions.length+'</td><td>'+h.total_marks+'</td><td>'+(h.confirmed?'Confirmed':'Draft')+'</td><td><button class="mini-btn" data-load="'+i+'">Load</button></td></tr>').join('')+'</tbody></table>':'No exams saved yet.';
+  $('history').innerHTML=hist.length?'<table><thead><tr><th>Type</th><th>Date</th><th>Range</th><th>Questions</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>'+hist.map((h,i)=>'<tr><td>'+esc(({monthly:'Monthly',juz:'Juz Completion',semester:'Semester'}[h.exam_type]||'Monthly'))+'</td><td>'+esc(h.date)+'</td><td>'+(h.start_juz?'Juz '+h.start_juz+'–'+h.end_juz:(h.exam_type==='monthly'?(h.monthly_source==='page_range'?'Pages '+h.start_page+'–'+h.end_page:(h.monthly_source==='both'?'New Lesson + Pages '+h.start_page+'–'+h.end_page:'New Lesson')):'—'))+'</td><td>'+h.questions.length+'</td><td>'+h.total_marks+'</td><td>'+(h.confirmed?'Confirmed':'Draft')+'</td><td><button class="mini-btn" data-edit="'+i+'">Edit</button> <button class="mini-btn" data-load="'+i+'">Load</button> <button class="mini-btn" data-delete="'+i+'">Delete</button></td></tr>').join('')+'</tbody></table>':'No exams saved yet.';
  }catch(e){msg(e.message||'History failed','error')}
 }
-$('history').addEventListener('click',e=>{
- let b=e.target.closest('[data-load]');if(!b)return;let h=hist[Number(b.dataset.load)];
+$('history').addEventListener('click',async e=>{
+ let del=e.target.closest('[data-delete]');
+ if(del){const h=hist[Number(del.dataset.delete)];if(!h||!confirm('Delete this exam history record and all its questions? This cannot be undone.'))return;del.disabled=true;try{await api('/students/'+sid()+'/exam/sessions/'+h.id,{method:'DELETE'});msg('Exam history deleted.','success');await historyLoad()}catch(err){msg(err.message||'Delete failed','error');del.disabled=false}return;}
+ let edit=e.target.closest('[data-edit]');let load=e.target.closest('[data-load]');if(!edit&&!load)return;
+ let h=hist[Number((edit||load).dataset[edit?'edit':'load'])];
+ if(edit){editingExamId=h.id;$('date').disabled=true;$('examType').disabled=true;}else{editingExamId=null;$('date').disabled=false;$('examType').disabled=false;}
  $('date').value=h.date;$('confirm').value=String(h.confirmed);$('examType').value=h.exam_type||'monthly';setupType();
  if(h.start_juz){if(type()==='juz')$('singleJuz').value=String(h.start_juz);else{$('startJuz').value=String(h.start_juz);$('endJuz').value=String(h.end_juz)}}
  if(type()==='monthly'){$('month').value=h.date.slice(0,7);$('monthlySource').value=h.monthly_source||'new_lesson';$('startPage').value=h.start_page||'';$('endPage').value=h.end_page||'';updateMonthlySource();}
- qs=h.questions.map(q=>({...q}));renderQ();msg(h.confirmed?'Confirmed exam loaded for review; server will prevent edits.':'Draft loaded.','success');
+ qs=h.questions.map(q=>({...q}));renderQ();msg(edit?'Exam loaded for editing. Save Exam & Marks to update this history record.':(h.confirmed?'Confirmed exam loaded for review.':'Draft loaded.'),'success');
 });
 $('questions').addEventListener('input',e=>{if(e.target.matches('[data-max]')){let i=e.target.dataset.max,a=document.querySelector('[data-award="'+i+'"]');if(!a)return;a.max=e.target.value;if(a.value!==''&&Number(a.value)>Number(e.target.value))a.value=e.target.value}});
-$('student').addEventListener('change',()=>{qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';$('history').innerHTML='Select View Exam History.'});
+$('student').addEventListener('change',()=>{editingExamId=null;$('date').disabled=false;$('examType').disabled=false;qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';$('history').innerHTML='Select View Exam History.'});
 $('examType').addEventListener('change',()=>{setupType();qs=[];$('questions').innerHTML='';$('ranges').innerHTML=''});
 $('monthlySource').addEventListener('change',()=>{updateMonthlySource();$('ranges').innerHTML='';qs=[];$('questions').innerHTML=''});
 $('rangesBtn').onclick=loadRanges;$('historyBtn').onclick=historyLoad;$('generate').onclick=generate;$('save').onclick=save;
