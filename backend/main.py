@@ -8,6 +8,8 @@ import base64
 import binascii
 import io
 import re
+import secrets
+import hashlib
 
 import cloudinary
 import cloudinary.uploader
@@ -42,7 +44,8 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 password_hash = PasswordHash.recommended()
 bearer = HTTPBearer(auto_error=False)
-TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "43200"))  # 30-day persistent sessions by default
+TOKEN_MINUTES = max(5, int(os.getenv("ACCESS_TOKEN_MINUTES", "20")))
+REFRESH_DAYS = max(1, int(os.getenv("REFRESH_TOKEN_DAYS", "30")))
 
 class Base(DeclarativeBase):
     pass
@@ -54,6 +57,16 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), index=True)  # teacher or parent
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    auth_token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Student(Base):
@@ -413,6 +426,9 @@ class LoginInput(BaseModel):
     login_id: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
 
+class RefreshInput(BaseModel):
+    refresh_token: str = Field(min_length=40, max_length=200)
+
 class ChangePasswordInput(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=6, max_length=256)
@@ -705,11 +721,14 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bear
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
         user_id = int(payload.get("sub", 0))
+        token_version = int(payload.get("ver", 0))
     except (jwt.PyJWTError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Account inactive")
+    if token_version != user.auth_token_version:
+        raise HTTPException(status_code=401, detail="Session revoked. Please sign in again.")
     return user
 
 def require_teacher(user: User = Depends(current_user)) -> User:
@@ -901,6 +920,11 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    # Additive auth-version migration for existing accounts.
+    from sqlalchemy import inspect
+    if "auth_token_version" not in {c["name"] for c in inspect(engine).get_columns("users")}:
+        with engine.begin() as conn:
+            conn.execute(sql_text("ALTER TABLE users ADD COLUMN auth_token_version INTEGER NOT NULL DEFAULT 0"))
     # Preserve existing profile-level character points as this month's opening values.
     # The NOT EXISTS guard makes this migration safe to run on every restart.
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
@@ -1003,13 +1027,73 @@ def startup() -> None:
 def health():
     return {"status": "ok", "service": "quran-journey-api"}
 
+def _new_access_token(user: User) -> str:
+    return jwt.encode(
+        {"sub": str(user.id), "role": user.role, "ver": user.auth_token_version,
+         "exp": datetime.now(timezone.utc) + timedelta(minutes=TOKEN_MINUTES)},
+        JWT_SECRET, algorithm="HS256",
+    )
+
+def _refresh_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+def _issue_refresh_session(user: User, db: Session) -> str:
+    raw = secrets.token_urlsafe(48)
+    db.add(AuthSession(user_id=user.id, token_hash=_refresh_hash(raw),
+                       expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_DAYS)))
+    return raw
+
+def _revoke_user_sessions(db: Session, user_id: int) -> None:
+    now = datetime.now(timezone.utc)
+    for session in db.scalars(select(AuthSession).where(
+        AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None)
+    )).all():
+        session.revoked_at = now
+
 @app.post("/auth/login")
 def login(data: LoginInput, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.login_id == data.login_id.strip()))
     if not user or not user.is_active or not password_hash.verify(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid login ID or password")
-    token = jwt.encode({"sub": str(user.id), "role": user.role, "exp": datetime.now(timezone.utc) + timedelta(minutes=TOKEN_MINUTES)}, JWT_SECRET, algorithm="HS256")
-    return {"access_token": token, "token_type": "bearer", "expires_in": TOKEN_MINUTES * 60, "user": {"id": user.id, "login_id": user.login_id, "role": user.role}}
+    refresh_token = _issue_refresh_session(user, db)
+    db.commit()
+    return {"access_token": _new_access_token(user), "refresh_token": refresh_token,
+            "token_type": "bearer", "expires_in": TOKEN_MINUTES * 60,
+            "refresh_expires_in": REFRESH_DAYS * 86400,
+            "user": {"id": user.id, "login_id": user.login_id, "role": user.role}}
+
+@app.post("/auth/refresh")
+def refresh_session(data: RefreshInput, db: Session = Depends(get_db)):
+    session = db.scalar(select(AuthSession).where(AuthSession.token_hash == _refresh_hash(data.refresh_token)))
+    now = datetime.now(timezone.utc)
+    if not session or session.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Refresh session is invalid. Please sign in again.")
+    expires_at = session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
+        session.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh session expired. Please sign in again.")
+    user = db.get(User, session.user_id)
+    if not user or not user.is_active:
+        session.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail="Account inactive")
+    session.revoked_at = now
+    new_refresh_token = _issue_refresh_session(user, db)
+    db.commit()
+    return {"access_token": _new_access_token(user), "refresh_token": new_refresh_token,
+            "token_type": "bearer", "expires_in": TOKEN_MINUTES * 60,
+            "refresh_expires_in": REFRESH_DAYS * 86400}
+
+@app.post("/auth/logout")
+def logout(data: RefreshInput, db: Session = Depends(get_db)):
+    session = db.scalar(select(AuthSession).where(AuthSession.token_hash == _refresh_hash(data.refresh_token)))
+    if session and session.revoked_at is None:
+        session.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"success": True}
 
 @app.get("/auth/me")
 def me(user: User = Depends(current_user)):
@@ -1025,6 +1109,8 @@ def change_password(data: ChangePasswordInput, user: User = Depends(current_user
     if password_hash.verify(data.new_password, user.password_hash):
         raise HTTPException(status_code=400, detail="New password must be different from the current password")
     user.password_hash = password_hash.hash(data.new_password)
+    user.auth_token_version += 1
+    _revoke_user_sessions(db, user.id)
     db.commit()
     return {"success": True, "message": "Password changed successfully. Please sign in again."}
 
@@ -1041,6 +1127,8 @@ def change_teacher_credentials(data: ChangeTeacherCredentialsInput, user: User =
         raise HTTPException(status_code=400, detail="New password must be different from the current password")
     user.login_id = new_login_id
     user.password_hash = password_hash.hash(data.new_password)
+    user.auth_token_version += 1
+    _revoke_user_sessions(db, user.id)
     db.commit()
     return {"success": True, "login_id": user.login_id, "message": "Login ID and password updated. Please sign in again."}
 
