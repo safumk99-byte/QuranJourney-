@@ -1275,6 +1275,8 @@ def reset_parent_password(
     if not parent:
         raise HTTPException(status_code=404, detail="Parent account not found")
     parent.password_hash = password_hash.hash(data.new_password)
+    parent.auth_token_version += 1
+    _revoke_user_sessions(db, parent.id)
     db.commit()
     return {"success": True, "message": "Parent password reset successfully."}
 
