@@ -1,18 +1,24 @@
 (()=>{'use strict';
 const TOKEN_KEY='quranJourney.auth.token',USER_KEY='quranJourney.auth.user';
+const toastScript=document.createElement('script');toastScript.src='./toast.js?v=global-popup-20261102';toastScript.defer=true;document.head.appendChild(toastScript);
 const config=window.QURAN_JOURNEY_CONFIG||{};
 const apiBase=String(config.API_BASE_URL||'').trim().replace(/\/$/,'');
 const getUser=()=>{try{return JSON.parse(localStorage.getItem(USER_KEY)||'null')}catch{return null}};
 const getToken=()=>localStorage.getItem(TOKEN_KEY)||'';
 const clear=()=>{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(USER_KEY)};
 const api=async(path,options={})=>{
- if(!apiBase)throw new Error('API URL is not configured. Set API_BASE_URL in config.js to the Render service URL.');
- const headers={'Content-Type':'application/json',...(options.headers||{})};
- if(options.auth!==false&&getToken())headers.Authorization='Bearer '+getToken();
- const response=await fetch(apiBase+path,{...options,headers});
- const data=await response.json().catch(()=>({detail:'Server returned a non-JSON response'}));
- if(!response.ok)throw new Error(data.detail||('Request failed ('+response.status+')'));
- return data;
+ try{
+  if(!apiBase)throw new Error('API URL is not configured. Set API_BASE_URL in config.js to the Render service URL.');
+  const headers={'Content-Type':'application/json',...(options.headers||{})};
+  if(options.auth!==false&&getToken())headers.Authorization='Bearer '+getToken();
+  const response=await fetch(apiBase+path,{...options,headers});
+  const data=await response.json().catch(()=>({detail:'Server returned a non-JSON response'}));
+  if(!response.ok)throw new Error(data.detail||('Request failed ('+response.status+')'));
+  return data;
+ }catch(error){
+  window.QuranJourneyToast?.show(error?.message||'Something went wrong. Please try again.','error');
+  throw error;
+ }
 };
 window.QuranJourneyAuth={api,apiBase,getUser,getToken,clear,login:async(login_id,password)=>{
  const data=await api('/auth/login',{method:'POST',auth:false,body:JSON.stringify({login_id,password})});
