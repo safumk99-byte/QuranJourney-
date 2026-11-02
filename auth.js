@@ -33,9 +33,12 @@ const api=async(path,options={})=>{
  try{
   if(!apiBase)throw new Error('API URL is not configured. Set API_BASE_URL in config.js to the Render service URL.');
   let {response,data}=await rawRequest(path,options);
-  if(response.status===401&&options.auth!==false&&getRefreshToken()){
-   try{const fresh=await refresh();({response,data}=await rawRequest(path,options,fresh))}
-   catch(refreshError){clear();location.replace('./login.html');throw refreshError}
+  if(response.status===401&&options.auth!==false){
+   if(getRefreshToken()){
+    try{const fresh=await refresh();({response,data}=await rawRequest(path,options,fresh))}
+    catch(refreshError){clear();location.replace('./login.html');throw refreshError}
+   }else{clear();location.replace('./login.html')}
+   if(response.status===401){clear();location.replace('./login.html')}
   }
   if(!response.ok)throw new Error(data.detail||('Request failed ('+response.status+')'));
   return data;
