@@ -94,7 +94,7 @@ $('history').addEventListener('click',async e=>{
  qs=h.questions.map(q=>({...q}));renderQ();msg(edit?'Exam loaded for editing. Save Exam & Marks to update this history record.':(h.confirmed?'Confirmed exam loaded for review.':'Draft loaded.'),'success');
 });
 $('questions').addEventListener('input',e=>{if(e.target.matches('[data-max]')){let i=e.target.dataset.max,a=document.querySelector('[data-award="'+i+'"]');if(!a)return;a.max=e.target.value;if(a.value!==''&&Number(a.value)>Number(e.target.value))a.value=e.target.value}});
-$('student').addEventListener('change',()=>{editingExamId=null;$('date').disabled=false;$('examType').disabled=false;qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';$('history').innerHTML='Select View Exam History.'});
+$('student').addEventListener('change',()=>{editingExamId=null;$('date').disabled=false;$('examType').disabled=false;qs=[];ranges=[];$('questions').innerHTML='';$('ranges').innerHTML='';hist=[];$('history').innerHTML=sid()?'Loading exam history…':'Select a student to view exam history.';if(sid())historyLoad();});
 $('examType').addEventListener('change',()=>{setupType();qs=[];$('questions').innerHTML='';$('ranges').innerHTML=''});
 $('monthlySource').addEventListener('change',()=>{updateMonthlySource();$('ranges').innerHTML='';qs=[];$('questions').innerHTML=''});
 $('rangesBtn').onclick=loadRanges;$('historyBtn').onclick=historyLoad;$('generate').onclick=generate;$('save').onclick=save;
