@@ -35,7 +35,9 @@ async function loadRanges(){
   if(source==='page_range'||source==='both'){try{const p=monthlyPageRange();const preview=await api('/students/'+sid()+'/exam/monthly-pages?start_page='+p.start_page+'&end_page='+p.end_page);$('ranges').innerHTML='<div class="range"><b>Quran Page Range:</b> Pages '+p.start_page+'–'+p.end_page+' · '+preview.ayah_count+' ayahs'+(source==='both'?' + New Lesson Progress':'')+'</div>';}catch(e){msg(e.message||'Invalid page range','error');return}if(source==='page_range')return;}
   const [year,month]=v.split('-').map(Number);
   try{ranges=await api('/students/'+sid()+'/exam/monthly-learning?year='+year+'&month='+month);
-   $('ranges').innerHTML=ranges.length?ranges.map(r=>'<div class="range"><b>'+esc(r.date)+'</b> · Surah '+r.start_surah+':'+r.start_ayah+' – '+r.end_surah+':'+r.end_ayah+' · '+esc(r.pages)+' pages</div>').join(''):'ഈ മാസത്തിൽ New Lesson രേഖകളൊന്നും കണ്ടെത്തിയില്ല.';
+   const lessonHtml=ranges.length?ranges.map(r=>'<div class="range"><b>'+esc(r.date)+'</b> · Surah '+r.start_surah+':'+r.start_ayah+' – '+r.end_surah+':'+r.end_ayah+' · '+esc(r.pages)+' pages</div>').join(''):'<div class="range">ഈ മാസത്തിൽ New Lesson രേഖകളൊന്നും കണ്ടെത്തിയില്ല.</div>';
+   const pageHtml=(source==='both')?$('ranges').innerHTML:'';
+   $('ranges').innerHTML=pageHtml+lessonHtml;
   }catch(e){msg(e.message||'Cannot load monthly New Lessons','error')}
  }else{
   const scope=selectedRange();
