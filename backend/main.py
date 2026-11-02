@@ -348,6 +348,7 @@ class ExamSaveInput(BaseModel):
     start_page: int | None = Field(default=None, ge=1, le=604)
     end_page: int | None = Field(default=None, ge=1, le=604)
     confirmed: bool = False
+    allow_confirmed_edit: bool = False
     questions: list[ExamQuestionInput] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -2120,8 +2121,8 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
         row = ExamSession(student_id=student_id, exam_date=exam_date, exam_type=data.exam_type, start_juz=(data.juz_no if data.exam_type == "juz" else data.start_juz), end_juz=(data.juz_no if data.exam_type == "juz" else data.end_juz), monthly_source=data.monthly_source, start_page=data.start_page, end_page=data.end_page)
         db.add(row)
         db.flush()
-    if row.confirmed:
-        raise HTTPException(status_code=409, detail="Confirmed exam marks cannot be edited.")
+    if row.confirmed and not data.allow_confirmed_edit:
+        raise HTTPException(status_code=409, detail="Confirmed exam marks require the explicit Edit action.")
     row.exam_type = data.exam_type
     row.start_juz = data.juz_no if data.exam_type == "juz" else data.start_juz
     row.end_juz = data.juz_no if data.exam_type == "juz" else data.end_juz
@@ -2145,6 +2146,16 @@ def save_exam(student_id: int, exam_date: date, data: ExamSaveInput, user: User 
     db.commit()
     db.refresh(row)
     return _exam_json(row)
+
+@app.delete("/students/{student_id}/exam/sessions/{exam_id}")
+def delete_exam_session(student_id: int, exam_id: int, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    _challenge_student(student_id, user, db)
+    row = db.scalar(select(ExamSession).where(ExamSession.id == exam_id, ExamSession.student_id == student_id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Exam history record not found.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True, "id": exam_id}
 
 _SURAH_AYAH_CACHE: dict[int, list[dict]] = {}
 
