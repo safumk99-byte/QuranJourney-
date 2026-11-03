@@ -28,11 +28,11 @@ jobs:
         run: node --check sw.js
       - name: Test Exam Zone Quran ayah links
         run: node scripts/test-exam-quran-links.cjs
-      - name: Test Quran reader corpus validation
-        run: node scripts/test-quran-reader.cjs
       - name: Check Quran data builder syntax
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
         run: node scripts/build-quran-data.cjs
       - name: Confirm bundled corpus is present
         run: test -s data/quran-uthmani.json
+      - name: Test Quran reader corpus validation
+        run: node scripts/test-quran-reader.cjs
