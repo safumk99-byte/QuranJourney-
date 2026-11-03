@@ -22,10 +22,5 @@ jobs:
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
         run: node scripts/build-quran-data.cjs
-      - name: Commit bundled data
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/quran-uthmani.json
-          git diff --cached --quiet || git commit -m "Add verified bundled Uthmani Quran data"
-          git push
+      - name: Confirm bundled corpus is present
+        run: test -s data/quran-uthmani.json
