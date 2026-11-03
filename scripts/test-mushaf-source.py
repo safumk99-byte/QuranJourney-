@@ -91,6 +91,30 @@ def verify_width(width: int) -> None:
                 raise RuntimeError(
                     f"Width {width} expected 6,236 ayahs, found {distinct_ayahs}"
                 )
+            page_count, first_page, last_page = connection.execute(
+                "SELECT COUNT(DISTINCT page_number), MIN(page_number), MAX(page_number) FROM glyphs"
+            ).fetchone()
+            if (page_count, first_page, last_page) != (604, 1, 604):
+                raise RuntimeError(
+                    f"Width {width} expected coordinates for all 604 pages, "
+                    f"found {page_count} pages from {first_page} to {last_page}"
+                )
+            image_height = image_sizes[1][1]
+            if any(size[1] != image_height for size in image_sizes.values()):
+                raise RuntimeError(f"Width {width} page image heights are inconsistent")
+            all_bounds = connection.execute(
+                "SELECT MIN(min_x), MIN(min_y), MAX(max_x), MAX(max_y) FROM glyphs"
+            ).fetchone()
+            left, top, right, bottom = all_bounds
+            if left < 0 or top < 0 or right > width or bottom > image_height:
+                raise RuntimeError(
+                    f"Width {width} all-page coordinates {all_bounds} exceed "
+                    f"image dimensions {width}x{image_height}"
+                )
+            print(
+                f"PASS: width {width} has ayah coordinates on all 604 pages "
+                f"within {width}x{image_height} image bounds"
+            )
 
             for page in PAGES:
                 count = connection.execute(
