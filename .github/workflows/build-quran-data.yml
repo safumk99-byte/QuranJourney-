@@ -26,6 +26,7 @@ on:
       - backend/main.py
       - backend/quran_page_map.json
       - scripts/test-mushaf-page-map.cjs
+      - scripts/test-mushaf-source.py
       - scripts/build-quran-data.cjs
       - quran.js
       - exam.js
