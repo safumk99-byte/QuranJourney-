@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),A=window.QuranJourneyAuth;
 if(!A||!A.requireRole(['teacher','parent']))return;
-const API='https://api.alquran.cloud/v1/quran/quran-uthmani',DB='quran-journey-reader',STORE='data',TOTAL=6236;
+const DATA_URL='./data/quran-uthmani.json',DB='quran-journey-reader',STORE='data',TOTAL=6236;
 let data=null,surahNo=1,ayahNo=1,size=29,timer=null;
 const params=new URLSearchParams(location.search),startSurah=Number(params.get('surah'))||1,startAyah=Number(params.get('ayah'))||1;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -11,7 +11,7 @@ async function readCache(){try{const d=await db();return await new Promise((ok,n
 async function writeCache(v){const d=await db();return new Promise((ok,no)=>{const t=d.transaction(STORE,'readwrite');t.objectStore(STORE).put(v,'uthmani');t.oncomplete=ok;t.onerror=()=>no(t.error)})}
 function check(v){if(!v||!Array.isArray(v.surahs)||v.surahs.length!==114)throw Error('114 സൂറത്തുകളുള്ള ഡാറ്റ ലഭിച്ചില്ല.');let n=0;v.surahs.forEach((s,i)=>{if(Number(s.number)!==i+1||!Array.isArray(s.ayahs)||s.ayahs.length!==Number(s.numberOfAyahs))throw Error('സൂറത്ത് '+(i+1)+'-ന്റെ എണ്ണം പൊരുത്തപ്പെടുന്നില്ല.');s.ayahs.forEach((a,j)=>{if(Number(a.numberInSurah)!==j+1||!a.text||!Number(a.page)||!Number(a.juz))throw Error('ആയത്ത് ഡാറ്റ പരിശോധിക്കൽ പരാജയപ്പെട്ടു: '+(i+1)+':'+(j+1));n++})});if(n!==TOTAL)throw Error('ആകെ ആയത്തുകൾ 6,236 അല്ല; ലഭിച്ചത് '+n);return v}
 async function load(){let v=await readCache();if(v){try{check(v);say('പരിശോധിച്ച ഖുർആൻ ഡാറ്റ ഈ ഉപകരണത്തിൽ ലഭ്യമാണ്.');return v}catch(_){v=null}}
-say('പൂർണ്ണ ഖുർആൻ ടെക്സ്റ്റ് ഡൗൺലോഡ് ചെയ്യുന്നു…');const c=new AbortController(),t=setTimeout(()=>c.abort(),45000);try{const r=await fetch(API,{signal:c.signal,cache:'no-store'});if(!r.ok)throw Error('ഖുർആൻ ഡാറ്റ ഉറവിടം HTTP '+r.status);const j=await r.json();if(j.code!==200)throw Error('ഖുർആൻ ഡാറ്റ ലഭ്യമല്ല.');v=check(j.data);try{await writeCache(v);say('114 സൂറത്തുകൾ · 6,236 ആയത്തുകൾ പരിശോധിച്ചു; ഈ ഉപകരണത്തിൽ ഓഫ്‌ലൈനായി സൂക്ഷിച്ചു.')}catch(cacheError){say('ഖുർആൻ ഡാറ്റ പരിശോധിച്ചു; ഇപ്പോൾ വായിക്കാം. ഉപകരണത്തിൽ ഓഫ്‌ലൈനായി സൂക്ഷിക്കാൻ കഴിഞ്ഞില്ല: '+(cacheError.message||'Storage unavailable'))}return v}catch(e){v=await readCache();if(v){check(v);say('ഇന്റർനെറ്റ് ലഭ്യമല്ല; ഉപകരണത്തിൽ സൂക്ഷിച്ച ഡാറ്റ ഉപയോഗിക്കുന്നു.');return v}throw Error(e.name==='AbortError'?'ഡൗൺലോഡ് സമയപരിധി കഴിഞ്ഞു. വീണ്ടും ശ്രമിക്കുക.':e.message)}finally{clearTimeout(t)}}
+say('പ്രോജക്റ്റിൽ ഉൾപ്പെടുത്തിയ ഖുർആൻ ഡാറ്റ ലോഡ് ചെയ്യുന്നു…');try{const r=await fetch(DATA_URL,{cache:'force-cache'});if(!r.ok)throw Error('പ്രാദേശിക ഖുർആൻ ഡാറ്റ ലഭ്യമല്ല: HTTP '+r.status);v=await r.json();check(v);try{await writeCache(v);say('114 സൂറത്തുകൾ · 6,236 ആയത്തുകൾ പരിശോധിച്ചു; ഓഫ്‌ലൈനായി സൂക്ഷിച്ചു.')}catch(e){say('ഖുർആൻ ഡാറ്റ പരിശോധിച്ചു; വായിക്കാം. ഉപകരണ കാഷ് ലഭ്യമല്ല.')}return v}catch(e){v=await readCache();if(v){check(v);say('പ്രോജക്റ്റ് ഡാറ്റ ലഭ്യമല്ല; ഉപകരണത്തിൽ സൂക്ഷിച്ച ഡാറ്റ ഉപയോഗിക്കുന്നു.');return v}throw Error(e.message||'ഖുർആൻ ഡാറ്റ ലോഡ് ചെയ്യാനായില്ല.')}}
 const surah=n=>data.surahs.find(s=>Number(s.number)===Number(n));
 const flat=()=>data.surahs.flatMap(s=>s.ayahs.map(a=>({...a,surah:s})));
 function populate(){$('surah').innerHTML=data.surahs.map(s=>'<option value="'+s.number+'">'+s.number+'. '+esc(s.englishName)+' · '+esc(s.name)+'</option>').join('');$('juz').innerHTML='<option value="">ജുസ് തിരഞ്ഞെടുക്കുക</option>'+Array.from({length:30},(_,i)=>'<option value="'+(i+1)+'">ജുസ് '+(i+1)+'</option>').join('')}
