@@ -2,10 +2,11 @@
 const CONFIG=window.QURAN_JOURNEY_CONFIG||{};
 const API=(CONFIG.API_BASE_URL||'').replace(/\/$/,'');
 const WIDTH=window.innerWidth<=560?480:800;
-const CACHE='quran-journey-mushaf-madani1405-'+WIDTH;
+const IMAGE_VERSION=8;
+const CACHE='quran-journey-mushaf-madani1405-v'+IMAGE_VERSION+'-'+WIDTH;
 const NS='http://www.w3.org/2000/svg';
 let zoom=1,activeSvg=null,activeObjectUrl=null,selected=null,renderToken=0;
-function resourceUrl(page,coordinates){if(!API)throw new Error('Quran Journey API URL is not configured.');return API+'/quran/mushaf/page/'+page+(coordinates?'/coordinates':'')+'?width='+WIDTH}
+function resourceUrl(page,coordinates){if(!API)throw new Error('Quran Journey API URL is not configured.');return API+'/quran/mushaf/page/'+page+(coordinates?'/coordinates':'')+'?width='+WIDTH+'&v='+IMAGE_VERSION}
 async function resource(url){
  const request=new Request(url,{mode:'cors'});
  if('caches'in window){try{const cache=await caches.open(CACHE),cached=await cache.match(request);if(cached)return cached}catch(_){}}
