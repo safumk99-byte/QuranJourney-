@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+// Keep the bundled Quran corpus reproducible from the pinned Tanzil Uthmani source.
 const fs=require('node:fs');
 const path=require('node:path');
 const SOURCE='https://raw.githubusercontent.com/dotquran/corpus/main/processed/uthmani/quran-uthmani.json';
