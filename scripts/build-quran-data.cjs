@@ -34,7 +34,7 @@ function fail(m){throw Error('Quran data build failed: '+m)}
    return {number:j+1,numberInSurah:j+1,text:a.text,page:Number(b.page),juz:Number(b.juz)};
   });
   total+=ayahs.length;
-  out.surahs.push({number:n,name:s.name,basmalah:basmalah?.text||(embeddedBasmalah?null:null),englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
+  out.surahs.push({number:n,name:s.name,basmalah:basmalah?.text||null,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
  }
  if(total!==6236)fail('Expected 6236 ayahs; got '+total);
  const pages=new Set(out.surahs.flatMap(s=>s.ayahs.map(a=>a.page)));
