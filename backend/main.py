@@ -724,6 +724,13 @@ def _load_mushaf_ayah_coordinates(width: int) -> dict:
             connection = sqlite3.connect(f"file:{database_file.name}?mode=ro", uri=True)
             try:
                 pages = {}
+                table_names = {
+                    row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                if "glyphs" not in table_names:
+                    raise ValueError("Official ayah-info database has no glyph coordinate table.")
                 query = """
                     SELECT page_number, sura_number, ayah_number, line_number,
                            MIN(min_x), MIN(min_y), MAX(max_x), MAX(max_y)
@@ -738,19 +745,21 @@ def _load_mushaf_ayah_coordinates(width: int) -> dict:
                         {"surah": int(surah), "ayah": int(ayah), "rects": []},
                     )
                     item["rects"].append([int(left), int(top), int(right), int(bottom)])
-                for page, surah, ayah, x, y in connection.execute(
-                    "SELECT page_number, sura_number, ayah_number, x, y FROM ayah_markers ORDER BY page_number, sura_number, ayah_number"
-                ):
-                    pages.setdefault(int(page), {}).setdefault("markers", []).append(
-                        {"surah": int(surah), "ayah": int(ayah), "x": int(x), "y": int(y)}
-                    )
-                for page, surah, x, y, width_value, height in connection.execute(
-                    "SELECT page_number, sura_number, x, y, width, height FROM sura_headers ORDER BY page_number, sura_number"
-                ):
-                    pages.setdefault(int(page), {}).setdefault("headers", []).append(
-                        {"surah": int(surah), "x": int(x), "y": int(y),
-                         "width": int(width_value), "height": int(height)}
-                    )
+                if "ayah_markers" in table_names:
+                    for page, surah, ayah, x, y in connection.execute(
+                        "SELECT page_number, sura_number, ayah_number, x, y FROM ayah_markers ORDER BY page_number, sura_number, ayah_number"
+                    ):
+                        pages.setdefault(int(page), {}).setdefault("markers", []).append(
+                            {"surah": int(surah), "ayah": int(ayah), "x": int(x), "y": int(y)}
+                        )
+                if "sura_headers" in table_names:
+                    for page, surah, x, y, width_value, height in connection.execute(
+                        "SELECT page_number, sura_number, x, y, width, height FROM sura_headers ORDER BY page_number, sura_number"
+                    ):
+                        pages.setdefault(int(page), {}).setdefault("headers", []).append(
+                            {"surah": int(surah), "x": int(x), "y": int(y),
+                             "width": int(width_value), "height": int(height)}
+                        )
                 return {
                     "edition": "MADANI_1405",
                     "width": width,
