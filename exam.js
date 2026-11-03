@@ -34,7 +34,8 @@ function quranAyahRef(expected){
 function renderQ(){
  $('questions').innerHTML=qs.map((q,i)=>{
   const ref=quranAyahRef(q.expected);
-  const ayahLink=ref?'<a class="quran-ayah-open" href="quran://'+ref.surah+'/'+ref.ayah+'" aria-label="Surah '+ref.surah+', Ayah '+ref.ayah+' Quran app-il thurakkuka"><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><span class="quran-ayah-hint">📖 ഈ ആയത്ത് Quran ആപ്പിൽ തുറക്കുക · '+ref.surah+':'+ref.ayah+'</span></a>':'<div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div>';
+  const appIntent='intent://'+ref?.surah+'/'+ref?.ayah+'#Intent;scheme=quran;package=com.quran.labs.androidquran;component=com.quran.labs.androidquran/.QuranForwarderActivity;S.browser_fallback_url='+encodeURIComponent('https://play.google.com/store/apps/details?id=com.quran.labs.androidquran')+';end';
+  const ayahLink=ref?'<a class="quran-ayah-open" href="'+appIntent+'" aria-label="Surah '+ref.surah+', Ayah '+ref.ayah+' Quran app-il thurakkuka"><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><span class="quran-ayah-hint">📖 ഈ ആയത്ത് Quran ആപ്പിൽ തുറക്കുക · '+ref.surah+':'+ref.ayah+'</span></a>':'<div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div>';
   return '<article class="q"><b>Question '+(i+1)+'</b>'+ayahLink+'<p class="muted">'+esc(q.expected||'')+'</p><div class="grid"><label>Maximum marks<input type="number" min="1" max="1000" data-max="'+i+'" value="'+(q.max_marks||5)+'"></label><label>Marks awarded<input type="number" min="0" max="'+(q.max_marks||5)+'" data-award="'+i+'" value="'+(q.awarded_marks??'')+'" placeholder="Teacher marks"></label></div><label>Teacher note<textarea data-note="'+i+'" rows="2">'+esc(q.note||'')+'</textarea></label></article>';
  }).join('');
 }
