@@ -11,6 +11,7 @@ const api=fs.readFileSync('backend/main.py','utf8');
 function assert(ok,message){if(!ok)throw new Error(message)}
 assert(map.edition==='MADANI_1405','Reader must use Quran for Android MADANI_1405 edition');
 assert(map.pageCount===604&&map.ayahCount===6236,'Mushaf totals must be 604 pages and 6,236 ayahs');
+assert(map.pageImageVersion===8,'Reader must pin the official Quran for Android image version 8');
 assert(map.pageStarts.length===604,'Exactly 604 page starts are required');
 assert(map.surahAyahCounts.length===114,'Exactly 114 surah counts are required');
 const counts=corpus.surahs.map(s=>s.ayahs.length);
@@ -42,6 +43,7 @@ for(let i=0;i<604;i++){
 assert(reader.includes('mushaf-madani-1405-page-map.json'),'Reader must load the verified Madani 1405 map');
 assert(reader.includes('pageForOrdinal')&&reader.includes('refForOrdinal'),'Reader must use exact ordinal-based page navigation');
 assert(renderer.includes('quran/mushaf/page/')&&renderer.includes('/coordinates'),'Renderer must use official page images and ayah hit coordinates');
+assert(renderer.includes('IMAGE_VERSION=8'),'Offline image cache must be tied to the official image version');
 assert(renderer.includes("coordinates.edition!=='MADANI_1405'"),'Renderer must reject a different Mushaf edition');
 assert(html.includes('./mushaf-renderer.js'),'Reader page must load the Mushaf renderer');
 assert(sw.includes('./mushaf-renderer.js')&&sw.includes('./data/mushaf-madani-1405-page-map.json'),'Offline shell must cache renderer and page map');
