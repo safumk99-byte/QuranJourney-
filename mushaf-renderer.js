@@ -62,7 +62,7 @@ async function render(page,surah,ayah,onAyah){
   coordinates.ayahs.forEach(item=>item.rects.forEach(rect=>svg.appendChild(addRect(svg,rect,item.surah,item.ayah,width,height))));
   svg.addEventListener('click',event=>{const node=event.target.closest&&event.target.closest('[data-surah][data-ayah]');if(!node)return;const s=Number(node.getAttribute('data-surah')),a=Number(node.getAttribute('data-ayah'));highlight(s,a);if(onAyah)onAyah(s,a)});
   svg.addEventListener('keydown',event=>{const node=event.target.closest&&event.target.closest('[data-surah][data-ayah]');if(node&&(event.key==='Enter'||event.key===' ')){event.preventDefault();const s=Number(node.getAttribute('data-surah')),a=Number(node.getAttribute('data-ayah'));highlight(s,a);if(onAyah)onAyah(s,a)}});
-  wrapper.append(img,svg);host.replaceChildren(wrapper);activeSvg=svg;
+  wrapper.append(img,svg);host.classList.remove('mushaf-text-fallback');host.replaceChildren(wrapper);activeSvg=svg;
   if(activeObjectUrl)URL.revokeObjectURL(activeObjectUrl);activeObjectUrl=objectUrl;
   highlight(surah,ayah);applyZoom();return true;
  }finally{if(token===renderToken)host.setAttribute('aria-busy','false')}
