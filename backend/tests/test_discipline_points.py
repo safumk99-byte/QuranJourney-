@@ -116,7 +116,8 @@ def test_all_point_boards_reset_each_month_without_deleting_history(client, monk
         })
         assert response.status_code == 200, response.text
 
-    points = client.get("/points/leaderboard", headers=headers)
+    # The endpoint defaults are bound at import time; explicitly request the test month.
+    points = client.get("/points/leaderboard?year=2026&month=10", headers=headers)
     assert points.status_code == 200
     current = next(row for row in points.json() if row["student_id"] == sid)
     assert current["month"] == "2026-10"
