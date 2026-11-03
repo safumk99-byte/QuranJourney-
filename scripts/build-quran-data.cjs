@@ -9,15 +9,15 @@ async function json(url){const r=await fetch(url,{headers:{'accept':'application
 function fail(m){throw Error('Quran data build failed: '+m)}
 (async()=>{
  const [source,metaResponse]=await Promise.all([json(SOURCE),json(META)]);
- if(!source||!Array.isArray(source.surahs)||source.surahs.length!==114)fail('Tanzil source does not contain exactly 114 surahs');
+ if(!source||!Array.isArray(source.surahs)||source.surahs.length!==114)fail('Tanzil source does not contain exactly 114 surahs');\n if(!source.metadata||!String(source.metadata.license||'').includes('Creative Commons Attribution 3.0'))fail('Tanzil license metadata missing or unexpected');\n if(!String(source.metadata.termsOfUse||'').toLowerCase().includes('tanzil.net'))fail('Tanzil attribution/terms metadata missing');
  const meta=metaResponse.data;
  if(!meta||!Array.isArray(meta.surahs)||meta.surahs.length!==114)fail('AlQuran Cloud metadata is incomplete');
- const out={metadata:{source:'Tanzil Project Uthmani v1.1',sourceRepository:'dotquran/corpus',sourceUrl:'https://tanzil.net',license:'Creative Commons Attribution 3.0',terms:'Quran text is reproduced verbatim. Do not alter the text. Credit Tanzil Project and link to https://tanzil.net.',metadataProvider:'AlQuran Cloud (surah names, revelation type, juz and Madinah Mushaf page positions)',generatedAt:new Date().toISOString(),ayahCount:6236,surahCount:114},surahs:[]};
+ const out={metadata:{source:source.metadata.source,version:source.metadata.version,sourceRepository:source.metadata.repository,sourceUrl:source.metadata.website,license:source.metadata.license,termsOfUse:source.metadata.termsOfUse,metadataProvider:'AlQuran Cloud (surah names, revelation type, juz and Madinah Mushaf page positions)',generatedAt:new Date().toISOString(),ayahCount:6236,surahCount:114},surahs:[]};
  let total=0;
  for(let i=0;i<114;i++){
   const s=source.surahs[i],m=meta.surahs[i],n=i+1;
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
-  const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
+  const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);\n  const basmalah=s.ayahs.find(a=>Number(a.number)===0);\n  if(n!==1&&n!==9&&!basmalah)fail('Separate basmalah entry missing in surah '+n);\n  if((n===1||n===9)&&basmalah)fail('Unexpected separate basmalah entry in surah '+n);
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
   const apiAyahs=m.ayahs||[];
   if(apiAyahs.length!==verses.length)fail('Metadata ayah count mismatch in surah '+n);
@@ -27,7 +27,7 @@ function fail(m){throw Error('Quran data build failed: '+m)}
    return {number:j+1,numberInSurah:j+1,text:a.text,page:Number(b.page),juz:Number(b.juz)};
   });
   total+=ayahs.length;
-  out.surahs.push({number:n,name:s.name,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
+  out.surahs.push({number:n,name:s.name,basmalah:n!==1&&n!==9?basmalah.text:null,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
  }
  if(total!==6236)fail('Expected 6236 ayahs; got '+total);
  const pages=new Set(out.surahs.flatMap(s=>s.ayahs.map(a=>a.page)));
