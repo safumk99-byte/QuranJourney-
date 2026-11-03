@@ -21,6 +21,8 @@ function fail(m){throw Error('Quran data build failed: '+m)}
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
   const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
   const basmalah=s.ayahs.find(a=>Number(a.number)===0);
+  if(n===1||n===9){if(basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');}
+  else if(!basmalah||!String(basmalah.text||'').trim())fail('Separate Tanzil basmalah entry missing in surah '+n);
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
   const apiAyahs=m.ayahs||[];
   if(apiAyahs.length!==verses.length)fail('Metadata ayah count mismatch in surah '+n);
