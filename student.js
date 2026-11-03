@@ -49,7 +49,7 @@ async function saveProgressSection(section){
  if(!ss||!sa||!es||!ea){showError('Please select the Surah and Ayah range for '+(section==='lesson'?'New Lesson':section==='recent'?'Recent Revision':'General Revision')+'.');return}
  if(!validSurahAyahSection(section))return;
  const pages=Number($(section==='lesson'?'lessonPages':section==='recent'?'recentPages':'generalPages').value);
- const payload={entry_date:date+'T00:00:00',remarks:$('remarks').value.trim()||null};
+ const payload={entry_date:date+'T00:00:00'};if(section==='general')payload.remarks=$('remarks').value.trim()||null;
  if(section==='lesson'){payload.start_surah=ss;payload.start_ayah=sa;payload.end_surah=es;payload.end_ayah=ea;payload.pages=String(pages);payload.new_lesson=null}
  if(section==='recent'){payload.start_surah=null;payload.start_ayah=null;payload.end_surah=null;payload.end_ayah=null;payload.new_lesson=null;payload.pages='0';payload.recent_start_surah=ss;payload.recent_start_ayah=sa;payload.recent_end_surah=es;payload.recent_end_ayah=ea;payload.recent_pages=String(pages);payload.pages='0'}
  if(section==='general'){payload.start_surah=null;payload.start_ayah=null;payload.end_surah=null;payload.end_ayah=null;payload.new_lesson=null;payload.pages='0';payload.general_start_surah=ss;payload.general_start_ayah=sa;payload.general_end_surah=es;payload.general_end_ayah=ea;payload.general_pages=String(pages);payload.pages='0'}
