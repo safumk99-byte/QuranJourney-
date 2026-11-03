@@ -24,7 +24,20 @@ function initJuz(){
  $('singleJuz').value='1';$('startJuz').value='1';$('endJuz').value='5';
 }
 async function students(){try{let a=await api('/students');$('student').innerHTML='<option value="">Select student</option>'+a.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' · '+esc(s.class_name||'No class')+'</option>').join('')}catch(e){msg(e.message||'Cannot load students','error')}}
-function renderQ(){ $('questions').innerHTML=qs.map((q,i)=>'<article class="q"><b>Question '+(i+1)+'</b><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><p class="muted">'+esc(q.expected||'')+'</p><div class="grid"><label>Maximum marks<input type="number" min="1" max="1000" data-max="'+i+'" value="'+(q.max_marks||5)+'"></label><label>Marks awarded<input type="number" min="0" max="'+(q.max_marks||5)+'" data-award="'+i+'" value="'+(q.awarded_marks??'')+'" placeholder="Teacher marks"></label></div><label>Teacher note<textarea data-note="'+i+'" rows="2">'+esc(q.note||'')+'</textarea></label></article>').join('')}
+function quranAyahRef(expected){
+ const match=String(expected||'').match(/^Surah\s+(\d+)\s*:\s*.*?\s+(\d+)\s*(?:[·(]|$)/i);
+ if(!match)return null;
+ const surah=Number(match[1]),ayah=Number(match[2]);
+ if(!Number.isInteger(surah)||surah<1||surah>114||!Number.isInteger(ayah)||ayah<1||ayah>286)return null;
+ return {surah,ayah};
+}
+function renderQ(){
+ $('questions').innerHTML=qs.map((q,i)=>{
+  const ref=quranAyahRef(q.expected);
+  const ayahLink=ref?'<a class="quran-ayah-open" href="quran://'+ref.surah+'/'+ref.ayah+'" aria-label="Surah '+ref.surah+', Ayah '+ref.ayah+' Quran app-il thurakkuka"><div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div><span class="quran-ayah-hint">📖 ഈ ആയത്ത് Quran ആപ്പിൽ തുറക്കുക · '+ref.surah+':'+ref.ayah+'</span></a>':'<div class="ayah" dir="rtl" lang="ar">'+esc(q.text)+'</div>';
+  return '<article class="q"><b>Question '+(i+1)+'</b>'+ayahLink+'<p class="muted">'+esc(q.expected||'')+'</p><div class="grid"><label>Maximum marks<input type="number" min="1" max="1000" data-max="'+i+'" value="'+(q.max_marks||5)+'"></label><label>Marks awarded<input type="number" min="0" max="'+(q.max_marks||5)+'" data-award="'+i+'" value="'+(q.awarded_marks??'')+'" placeholder="Teacher marks"></label></div><label>Teacher note<textarea data-note="'+i+'" rows="2">'+esc(q.note||'')+'</textarea></label></article>';
+ }).join('');
+}
 function readQ(){qs=qs.map((q,i)=>{const max=document.querySelector('[data-max="'+i+'"]'),award=document.querySelector('[data-award="'+i+'"]'),note=document.querySelector('[data-note="'+i+'"]');if(!max||!award||!note)throw new Error('Question '+(i+1)+' fields are missing. Regenerate the questions and try again.');return {...q,max_marks:Number(max.value),awarded_marks:award.value===''?null:Number(award.value),note:note.value.trim()}})}
 function selectedRange(){return type()==='juz'?{juz_no:Number($('singleJuz').value)}:{start_juz:Number($('startJuz').value),end_juz:Number($('endJuz').value)}}
 async function loadRanges(){
