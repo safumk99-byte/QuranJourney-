@@ -10,6 +10,7 @@ on:
       - backend/main.py
       - backend/quran_page_map.json
       - scripts/test-mushaf-page-map.cjs
+      - scripts/test-mushaf-source.py
       - scripts/build-quran-data.cjs
       - exam.js
       - sw.js
@@ -56,6 +57,8 @@ jobs:
         run: node --check sw.js
       - name: Test Exam Zone Quran ayah links
         run: node scripts/test-exam-quran-links.cjs
+      - name: Verify official Madani 1405 page images and ayah coordinates
+        run: python scripts/test-mushaf-source.py
       - name: Check Quran data builder syntax
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
