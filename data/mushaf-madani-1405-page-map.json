@@ -8,7 +8,7 @@
   "pageImageProvider": "https://android.quran.com/data/width_{width}/page{page}.png",
   "pageImageVersion": 8,
   "ayahInfoProvider": "https://android.quran.com/data/databases/ayahinfo/ayahinfo_{width}.zip",
-  "publisherTerms": "https://qurancomplex.gov.sa/",
+  "publisherTerms": "https://dm.qurancomplex.gov.sa/rights/",
   "pageCount": 604,
   "ayahCount": 6236,
   "surahAyahCounts": [
