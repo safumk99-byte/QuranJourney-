@@ -15,7 +15,7 @@ say('പൂർണ്ണ ഖുർആൻ ടെക്സ്റ്റ് ഡൗൺ
 const surah=n=>data.surahs.find(s=>Number(s.number)===Number(n));
 const flat=()=>data.surahs.flatMap(s=>s.ayahs.map(a=>({...a,surah:s})));
 function populate(){$('surah').innerHTML=data.surahs.map(s=>'<option value="'+s.number+'">'+s.number+'. '+esc(s.englishName)+' · '+esc(s.name)+'</option>').join('');$('juz').innerHTML='<option value="">ജുസ് തിരഞ്ഞെടുക്കുക</option>'+Array.from({length:30},(_,i)=>'<option value="'+(i+1)+'">ജുസ് '+(i+1)+'</option>').join('')}
-function render(scroll=true){const s=surah(surahNo);$('surah').value=surahNo;$('ayah').value=ayahNo;$('surahName').textContent=s.name;$('surahInfo').textContent=s.englishName+' · '+s.englishNameTranslation+' · '+s.numberOfAyahs+' ആയത്തുകൾ · '+s.revelationType;
+function render(scroll=true){const s=surah(surahNo),current=s.ayahs[ayahNo-1];$('surah').value=surahNo;$('ayah').value=ayahNo;$('juz').value=String(current.juz);$('page').value=String(current.page);$('surahName').textContent=s.name;$('surahInfo').textContent=s.englishName+' · '+s.englishNameTranslation+' · '+s.numberOfAyahs+' ആയത്തുകൾ · '+s.revelationType;
 const b=surahNo!==1&&surahNo!==9?'<div class="qr-bism" lang="ar">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>':''; $('text').innerHTML=b+s.ayahs.map(a=>'<span class="qr-ayah '+(a.numberInSurah===ayahNo?'active':'')+'" data-ayah="'+a.numberInSurah+'" id="a'+a.numberInSurah+'" tabindex="0" role="button">'+esc(a.text)+' <span class="qr-mark">۞'+a.numberInSurah+'۞</span></span> ').join('');
 $('prevSurah').disabled=surahNo===1;$('nextSurah').disabled=surahNo===114;$('prevPage').disabled=!pageTarget(-1);$('nextPage').disabled=!pageTarget(1);
 if(scroll)requestAnimationFrame(()=> $('a'+ayahNo)?.scrollIntoView({behavior:'smooth',block:'center'}))}
