@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - scripts/build-quran-data.cjs
+      - quran.js
+      - .github/workflows/build-quran-data.yml
 jobs:
   build-quran-data:
     runs-on: ubuntu-latest
@@ -14,6 +16,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Check Quran reader JavaScript syntax
+        run: node --check quran.js
+      - name: Check Quran data builder syntax
+        run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
         run: node scripts/build-quran-data.cjs
       - name: Commit bundled data
