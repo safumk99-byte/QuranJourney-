@@ -9,7 +9,9 @@ async function json(url){const r=await fetch(url,{headers:{'accept':'application
 function fail(m){throw Error('Quran data build failed: '+m)}
 (async()=>{
  const [source,metaResponse]=await Promise.all([json(SOURCE),json(META)]);
- if(!source||!Array.isArray(source.surahs)||source.surahs.length!==114)fail('Tanzil source does not contain exactly 114 surahs');\n if(!source.metadata||!String(source.metadata.license||'').includes('Creative Commons Attribution 3.0'))fail('Tanzil license metadata missing or unexpected');\n if(!String(source.metadata.termsOfUse||'').toLowerCase().includes('tanzil.net'))fail('Tanzil attribution/terms metadata missing');
+ if(!source||!Array.isArray(source.surahs)||source.surahs.length!==114)fail('Tanzil source does not contain exactly 114 surahs');
+ if(!source.metadata||!String(source.metadata.license||'').includes('Creative Commons Attribution 3.0'))fail('Tanzil license metadata missing or unexpected');
+ if(!String(source.metadata.termsOfUse||'').toLowerCase().includes('tanzil.net'))fail('Tanzil attribution/terms metadata missing');
  const meta=metaResponse.data;
  if(!meta||!Array.isArray(meta.surahs)||meta.surahs.length!==114)fail('AlQuran Cloud metadata is incomplete');
  const out={metadata:{source:source.metadata.source,version:source.metadata.version,sourceRepository:source.metadata.repository,sourceUrl:source.metadata.website,license:source.metadata.license,termsOfUse:source.metadata.termsOfUse,metadataProvider:'AlQuran Cloud (surah names, revelation type, juz and Madinah Mushaf page positions)',generatedAt:new Date().toISOString(),ayahCount:6236,surahCount:114},surahs:[]};
@@ -17,7 +19,10 @@ function fail(m){throw Error('Quran data build failed: '+m)}
  for(let i=0;i<114;i++){
   const s=source.surahs[i],m=meta.surahs[i],n=i+1;
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
-  const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);\n  const basmalah=s.ayahs.find(a=>Number(a.number)===0);\n  if(n!==1&&n!==9&&!basmalah)fail('Separate basmalah entry missing in surah '+n);\n  if((n===1||n===9)&&basmalah)fail('Unexpected separate basmalah entry in surah '+n);
+  const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
+  const basmalah=s.ayahs.find(a=>Number(a.number)===0);
+  if(n!==1&&n!==9&&!basmalah)fail('Separate basmalah entry missing in surah '+n);
+  if((n===1||n===9)&&basmalah)fail('Unexpected separate basmalah entry in surah '+n);
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
   const apiAyahs=m.ayahs||[];
   if(apiAyahs.length!==verses.length)fail('Metadata ayah count mismatch in surah '+n);
