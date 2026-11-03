@@ -25,7 +25,7 @@ function initJuz(){
 }
 async function students(){try{let a=await api('/students');$('student').innerHTML='<option value="">Select student</option>'+a.map(s=>'<option value="'+s.id+'">'+esc(s.name)+' · '+esc(s.class_name||'No class')+'</option>').join('')}catch(e){msg(e.message||'Cannot load students','error')}}
 function quranAyahRef(expected){
- const match=String(expected||'').match(/^Surah\\s+(\\d+)\\s*:\\s*.*?\\s+(\\d+)\\s*(?:[·(]|$)/i);
+ const match=String(expected||'').match(/^Surah\s+(\d+)\s*:\s*.*?\s+(\d+)\s*(?:[·(]|$)/i);
  if(!match)return null;
  const surah=Number(match[1]),ayah=Number(match[2]);
  if(!Number.isInteger(surah)||surah<1||surah>114||!Number.isInteger(ayah)||ayah<1||ayah>286)return null;
