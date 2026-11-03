@@ -22,7 +22,7 @@ function fail(m){throw Error('Quran data build failed: '+m)}
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
   const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
   const basmalah=s.ayahs.find(a=>Number(a.number)===0);
-  // Separate basmalah records are optional in this corpus.
+  // Separate basmalah records are optional in this corpus; only validate entries that exist.
   if((n===1||n===9)&&basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');
   if(basmalah&&!String(basmalah.text||'').trim())fail('Empty separate basmalah entry in surah '+n);
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
