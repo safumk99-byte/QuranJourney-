@@ -26,10 +26,12 @@ function highlight(surah,ayah){
   rect.setAttribute('aria-pressed',active?'true':'false');
  });
 }
-function addRect(svg,rect,surah,ayah){
+function addRect(svg,rect,surah,ayah,pageWidth,pageHeight){
  const node=document.createElementNS(NS,'rect');
- node.setAttribute('x',rect[0]);node.setAttribute('y',rect[1]);
- node.setAttribute('width',Math.max(1,rect[2]-rect[0]));node.setAttribute('height',Math.max(1,rect[3]-rect[1]));
+ const left=Math.max(0,Math.min(pageWidth,rect[0])),top=Math.max(0,Math.min(pageHeight,rect[1]));
+ const right=Math.max(left,Math.min(pageWidth,rect[2])),bottom=Math.max(top,Math.min(pageHeight,rect[3]));
+ node.setAttribute('x',left);node.setAttribute('y',top);
+ node.setAttribute('width',Math.max(1,right-left));node.setAttribute('height',Math.max(1,bottom-top));
  node.setAttribute('fill','transparent');node.setAttribute('fill-opacity','0');
  node.setAttribute('data-surah',surah);node.setAttribute('data-ayah',ayah);
  node.setAttribute('role','button');node.setAttribute('tabindex','0');
@@ -57,7 +59,7 @@ async function render(page,surah,ayah,onAyah){
   const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 '+width+' '+height);
   svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('class','mushaf-ayah-hit-layer');
   svg.setAttribute('role','group');svg.setAttribute('aria-label','Selectable ayahs on page '+page);
-  coordinates.ayahs.forEach(item=>item.rects.forEach(rect=>svg.appendChild(addRect(svg,rect,item.surah,item.ayah))));
+  coordinates.ayahs.forEach(item=>item.rects.forEach(rect=>svg.appendChild(addRect(svg,rect,item.surah,item.ayah,width,height))));
   svg.addEventListener('click',event=>{const node=event.target.closest&&event.target.closest('[data-surah][data-ayah]');if(!node)return;const s=Number(node.getAttribute('data-surah')),a=Number(node.getAttribute('data-ayah'));highlight(s,a);if(onAyah)onAyah(s,a)});
   svg.addEventListener('keydown',event=>{const node=event.target.closest&&event.target.closest('[data-surah][data-ayah]');if(node&&(event.key==='Enter'||event.key===' ')){event.preventDefault();const s=Number(node.getAttribute('data-surah')),a=Number(node.getAttribute('data-ayah'));highlight(s,a);if(onAyah)onAyah(s,a)}});
   wrapper.append(img,svg);host.replaceChildren(wrapper);activeSvg=svg;
