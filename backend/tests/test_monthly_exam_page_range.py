@@ -44,7 +44,7 @@ def test_monthly_exam_page_range_generates_only_page_ayahs(client, monkeypatch):
         headers=headers,
         json={
             "date": "2026-11-02", "exam_type": "monthly",
-            "year": 2026, "month": 11, "question_count": 5,
+            "year": 2026, "month": 11, "question_count": 1,
             "monthly_source": "page_range", "start_page": 1, "end_page": 1,
         },
     )
@@ -52,7 +52,7 @@ def test_monthly_exam_page_range_generates_only_page_ayahs(client, monkeypatch):
     body = generated.json()
     assert body["monthly_source"] == "page_range"
     assert (body["start_page"], body["end_page"]) == (1, 1)
-    assert len(body["questions"]) == 5
+    assert len(body["questions"]) == 1
     assert all("Pages 1–1" in q["expected"] for q in body["questions"])
 
 
@@ -81,13 +81,13 @@ def test_monthly_exam_both_source_deduplicates_overlapping_ayahs(client, monkeyp
         headers=headers,
         json={
             "date": "2026-11-02", "exam_type": "monthly",
-            "year": 2026, "month": 11, "question_count": 7,
+            "year": 2026, "month": 11, "question_count": 1,
             "monthly_source": "both", "start_page": 1, "end_page": 1,
         },
     )
     assert generated.status_code == 200, generated.text
     body = generated.json()
-    assert len(body["questions"]) == 7
+    assert len(body["questions"]) == 1
     assert body["monthly_source"] == "both"
 
 

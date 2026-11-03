@@ -8,6 +8,10 @@ import base64
 import binascii
 import io
 import re
+import sqlite3
+import tempfile
+import zipfile
+from functools import lru_cache
 import secrets
 import hashlib
 
@@ -15,7 +19,7 @@ import cloudinary
 import cloudinary.uploader
 import uuid
 from urllib.error import URLError, HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from datetime import date, datetime, timedelta, timezone
 from typing import Generator
 from zoneinfo import ZoneInfo
@@ -691,6 +695,121 @@ def _delete_cloudinary_photo(public_id: str | None) -> None:
 
 
 app = FastAPI(title="Quran Journey API", version="0.1.0")
+_MUSHAF_WIDTHS = {320, 480, 800, 1024, 1260}
+
+@lru_cache(maxsize=8)
+def _load_mushaf_page_image(page: int, width: int) -> bytes:
+    url = f"https://android.quran.com/data/width_{width}/page{page:03d}.png"
+    try:
+        with urlopen(Request(url, headers={"User-Agent": "QuranJourney-Mushaf-Proxy/1.0"}), timeout=30) as response:
+            return response.read()
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Official Madani Mushaf page {page} is temporarily unavailable.") from exc
+
+
+@lru_cache(maxsize=4)
+def _load_mushaf_ayah_coordinates(width: int) -> dict:
+    url = f"https://android.quran.com/data/databases/ayahinfo/ayahinfo_{width}.zip"
+    try:
+        with urlopen(Request(url, headers={"User-Agent": "QuranJourney-Mushaf-Proxy/1.0"}), timeout=45) as response:
+            archive_bytes = response.read()
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            database_names = [name for name in archive.namelist() if name.lower().endswith(".db")]
+            if not database_names:
+                raise ValueError("Official ayah-info archive contains no SQLite database.")
+            database_bytes = archive.read(database_names[0])
+        with tempfile.NamedTemporaryFile(suffix=".db") as database_file:
+            database_file.write(database_bytes)
+            database_file.flush()
+            connection = sqlite3.connect(f"file:{database_file.name}?mode=ro", uri=True)
+            try:
+                pages = {}
+                table_names = {
+                    row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                if "glyphs" not in table_names:
+                    raise ValueError("Official ayah-info database has no glyph coordinate table.")
+                query = """
+                    SELECT page_number, sura_number, ayah_number, line_number,
+                           MIN(min_x), MIN(min_y), MAX(max_x), MAX(max_y)
+                    FROM glyphs
+                    GROUP BY page_number, sura_number, ayah_number, line_number
+                    ORDER BY page_number, sura_number, ayah_number, line_number
+                """
+                for row in connection.execute(query):
+                    page, surah, ayah, line, left, top, right, bottom = row
+                    item = pages.setdefault(int(page), {}).setdefault(
+                        f"{int(surah)}:{int(ayah)}",
+                        {"surah": int(surah), "ayah": int(ayah), "rects": []},
+                    )
+                    item["rects"].append([int(left), int(top), int(right), int(bottom)])
+                if "ayah_markers" in table_names:
+                    for page, surah, ayah, x, y in connection.execute(
+                        "SELECT page_number, sura_number, ayah_number, x, y FROM ayah_markers ORDER BY page_number, sura_number, ayah_number"
+                    ):
+                        pages.setdefault(int(page), {}).setdefault("markers", []).append(
+                            {"surah": int(surah), "ayah": int(ayah), "x": int(x), "y": int(y)}
+                        )
+                if "sura_headers" in table_names:
+                    for page, surah, x, y, width_value, height in connection.execute(
+                        "SELECT page_number, sura_number, x, y, width, height FROM sura_headers ORDER BY page_number, sura_number"
+                    ):
+                        pages.setdefault(int(page), {}).setdefault("headers", []).append(
+                            {"surah": int(surah), "x": int(x), "y": int(y),
+                             "width": int(width_value), "height": int(height)}
+                        )
+                return {
+                    "edition": "MADANI_1405",
+                    "width": width,
+                    "pages": {
+                        str(page): {
+                            "ayahs": sorted(
+                                [value for key, value in content.items() if ":" in key],
+                                key=lambda value: (value["surah"], value["ayah"]),
+                            ),
+                            "markers": content.get("markers", []),
+                            "headers": content.get("headers", []),
+                        }
+                        for page, content in pages.items()
+                    },
+                }
+            finally:
+                connection.close()
+    except HTTPException:
+        raise
+    except (HTTPError, URLError, TimeoutError, zipfile.BadZipFile, sqlite3.Error, OSError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="Official Madani Mushaf ayah-position data is temporarily unavailable.") from exc
+
+
+@app.get("/quran/mushaf/page/{page}")
+def get_mushaf_page(page: int, width: int = Query(default=480)):
+    if page < 1 or page > 604:
+        raise HTTPException(status_code=404, detail="Mushaf page must be between 1 and 604.")
+    if width not in _MUSHAF_WIDTHS:
+        raise HTTPException(status_code=400, detail="Unsupported Mushaf image width.")
+    image = _load_mushaf_page_image(page, width)
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Mushaf-Edition": "MADANI_1405"},
+    )
+
+
+@app.get("/quran/mushaf/page/{page}/coordinates")
+def get_mushaf_page_coordinates(page: int, width: int = Query(default=480)):
+    if page < 1 or page > 604:
+        raise HTTPException(status_code=404, detail="Mushaf page must be between 1 and 604.")
+    if width not in _MUSHAF_WIDTHS:
+        raise HTTPException(status_code=400, detail="Unsupported Mushaf coordinate width.")
+    all_pages = _load_mushaf_ayah_coordinates(width)
+    page_data = all_pages["pages"].get(str(page))
+    if not page_data:
+        raise HTTPException(status_code=404, detail=f"Coordinates for Mushaf page {page} are unavailable.")
+    return {**page_data, "page": page, "width": width, "edition": "MADANI_1405"}
+
+
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "https://safumk99-byte.github.io").split(",") if x.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 

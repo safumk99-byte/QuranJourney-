@@ -25,4 +25,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: pytest
+      - name: Test Madani 1405 Mushaf image and ayah-coordinate endpoints
+        run: pytest tests/test_mushaf_endpoints.py
+      - name: Run complete backend test suite
+        run: pytest

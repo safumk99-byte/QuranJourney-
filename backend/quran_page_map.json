@@ -1,5 +1,5 @@
 {
-  "source": "Mushaf-Learning/quran-text metadata/pages.json and metadata/quran-data.xml; 604-page Madinah Mushaf page and Juz boundaries. Quran metadata source: Tanzil.net (CC BY 3.0).",
+  "source": "Quran for Android (quran/quran_android), pages/data/madani MadaniDataSource.kt — MADANI_1405 page starts; official King Fahd Complex digital page images and ayah-info coordinates.",
   "pages": [
     [
       1,

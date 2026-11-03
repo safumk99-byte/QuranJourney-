@@ -5,6 +5,12 @@ on:
     paths:
       - quran.html
       - quran.js
+      - mushaf-renderer.js
+      - data/mushaf-madani-1405-page-map.json
+      - backend/main.py
+      - backend/quran_page_map.json
+      - scripts/test-mushaf-page-map.cjs
+      - scripts/test-mushaf-source.py
       - scripts/build-quran-data.cjs
       - exam.js
       - sw.js
@@ -13,6 +19,14 @@ on:
       - .github/workflows/build-quran-data.yml
   push:
     paths:
+      - quran.html
+      - quran.js
+      - mushaf-renderer.js
+      - data/mushaf-madani-1405-page-map.json
+      - backend/main.py
+      - backend/quran_page_map.json
+      - scripts/test-mushaf-page-map.cjs
+      - scripts/test-mushaf-source.py
       - scripts/build-quran-data.cjs
       - quran.js
       - exam.js
@@ -32,12 +46,20 @@ jobs:
           node-version: 20
       - name: Check Quran reader JavaScript syntax
         run: node --check quran.js
+      - name: Check Mushaf renderer JavaScript syntax
+        run: node --check mushaf-renderer.js
+      - name: Check backend Python syntax
+        run: python -m py_compile backend/main.py
+      - name: Test exact Madani 1405 page map and reader integration
+        run: node scripts/test-mushaf-page-map.cjs
       - name: Check Exam Zone JavaScript syntax
         run: node --check exam.js
       - name: Check service worker JavaScript syntax
         run: node --check sw.js
       - name: Test Exam Zone Quran ayah links
         run: node scripts/test-exam-quran-links.cjs
+      - name: Verify official Madani 1405 page images and ayah coordinates
+        run: python scripts/test-mushaf-source.py
       - name: Check Quran data builder syntax
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
