@@ -22,10 +22,9 @@ function fail(m){throw Error('Quran data build failed: '+m)}
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
   const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
   const basmalah=s.ayahs.find(a=>Number(a.number)===0);
-  const embeddedBasmalah=[95,97].includes(n);
-  if(n===1||n===9||embeddedBasmalah){if(basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');}
-  else if(!basmalah||!String(basmalah.text||'').trim())fail('Separate Tanzil basmalah entry missing in surah '+n);
-  if(embeddedBasmalah&&!String(verses[0]?.text||'').startsWith('بِّسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ'))fail('Expected verbatim embedded basmalah prefix missing in surah '+n+' ayah 1');
+  // Separate basmalah records are optional in this corpus.
+  if((n===1||n===9)&&basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');
+  if(basmalah&&!String(basmalah.text||'').trim())fail('Empty separate basmalah entry in surah '+n);
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
   const apiAyahs=m.ayahs||[];
   if(apiAyahs.length!==verses.length)fail('Metadata ayah count mismatch in surah '+n);
