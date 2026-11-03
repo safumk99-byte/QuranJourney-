@@ -44,7 +44,7 @@ async function render(page,surah,ayah,onAyah){
   ]);
   const [blob,coordinates]=await Promise.all([imageResponse.blob(),coordinateResponse.json()]);
   if(token!==renderToken)return false;
-  if(coordinates.edition!=='MADANI_1405'||Number(coordinates.page)!==Number(page)||!Array.isArray(coordinates.ayahs))throw new Error('Madani 1405 ayah coordinates failed validation.');
+  if(coordinates.edition!=='MADANI_1405'||Number(coordinates.page)!==Number(page)||Number(coordinates.width)!==WIDTH||!Array.isArray(coordinates.ayahs))throw new Error('Madani 1405 ayah coordinates failed validation.');
   const objectUrl=URL.createObjectURL(blob),img=document.createElement('img');
   img.className='mushaf-page-image';img.alt='Quran for Android Madani Mushaf page '+page;
   img.decoding='async';img.draggable=false;img.src=objectUrl;
