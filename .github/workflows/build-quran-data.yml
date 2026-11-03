@@ -1,6 +1,16 @@
 name: Build bundled Quran data
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - quran.html
+      - quran.js
+      - scripts/build-quran-data.cjs
+      - exam.js
+      - sw.js
+      - scripts/test-exam-quran-links.cjs
+      - scripts/test-quran-reader.cjs
+      - .github/workflows/build-quran-data.yml
   push:
     paths:
       - scripts/build-quran-data.cjs
