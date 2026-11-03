@@ -18,6 +18,13 @@ on:
       - .github/workflows/build-quran-data.yml
   push:
     paths:
+      - quran.html
+      - quran.js
+      - mushaf-renderer.js
+      - data/mushaf-madani-1405-page-map.json
+      - backend/main.py
+      - backend/quran_page_map.json
+      - scripts/test-mushaf-page-map.cjs
       - scripts/build-quran-data.cjs
       - quran.js
       - exam.js
