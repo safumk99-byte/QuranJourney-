@@ -5,6 +5,9 @@ on:
     paths:
       - scripts/build-quran-data.cjs
       - quran.js
+      - exam.js
+      - sw.js
+      - scripts/test-exam-quran-links.cjs
       - .github/workflows/build-quran-data.yml
 jobs:
   build-quran-data:
@@ -18,6 +21,12 @@ jobs:
           node-version: 20
       - name: Check Quran reader JavaScript syntax
         run: node --check quran.js
+      - name: Check Exam Zone JavaScript syntax
+        run: node --check exam.js
+      - name: Check service worker JavaScript syntax
+        run: node --check sw.js
+      - name: Test Exam Zone Quran ayah links
+        run: node scripts/test-exam-quran-links.cjs
       - name: Check Quran data builder syntax
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
