@@ -1,4 +1,5 @@
 (()=>{'use strict';
+const $=id=>document.getElementById(id);
 const CONFIG=window.QURAN_JOURNEY_CONFIG||{};
 const API=(CONFIG.API_BASE_URL||'').replace(/\/$/,'');
 const WIDTH=window.innerWidth<=560?480:800;
