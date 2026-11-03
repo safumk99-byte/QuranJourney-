@@ -2,6 +2,11 @@
 const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('quran.js','utf8');
+const rendererSource=fs.readFileSync('mushaf-renderer.js','utf8');
+const rendererSandbox={window:{innerWidth:400},document:{getElementById:()=>null}};
+vm.runInNewContext(rendererSource,rendererSandbox);
+rendererSandbox.window.QuranMushaf.changeZoom(0.1);
+console.log('PASS: Mushaf renderer DOM selector and zoom initialization');
 const start=source.indexOf('function check(v){');
 const end=source.indexOf('\nasync function load()',start);
 if(start<0||end<0)throw new Error('Reader check() boundaries not found');
