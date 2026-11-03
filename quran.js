@@ -21,7 +21,7 @@ function pageForOrdinal(value){let lo=0,hi=pageMap.pageStarts.length-1;while(lo<
 function render(scroll=true){
  const s=surah(surahNo),current=s.ayahs[ayahNo-1],global=ordinal(surahNo,ayahNo),pageNo=pageForOrdinal(global),start=pageMap.pageStarts[pageNo-1],end=pageNo<604?pageMap.pageStarts[pageNo]-1:6236;
  $('surah').value=surahNo;$('ayah').value=ayahNo;$('juz').value=String(current.juz);$('page').value=String(pageNo);
- $('pageSurah').textContent=s.englishName;$('pageJuz').textContent='Juz’ '+current.juz;$('mushafPageNo').textContent=pageNo;
+ $('pageSurah').textContent=s.englishName;$('pageJuz').textContent='Juz’ '+current.juz;
  const fallback=()=>{let html='';for(let i=start;i<=end;i++){const ref=refForOrdinal(i),chapter=surah(ref.surah),a=chapter.ayahs[ref.ayah-1];if(ref.ayah===1){html+='<div class="mushaf-surah-title"><strong>'+esc(chapter.name)+'</strong></div>';if(ref.surah!==1&&ref.surah!==9&&chapter.basmalah)html+='<div class="qr-bism">'+esc(chapter.basmalah)+'</div>'}html+='<span class="qr-ayah '+(ref.surah===surahNo&&ref.ayah===ayahNo?'active':'')+'" data-surah="'+ref.surah+'" data-ayah="'+ref.ayah+'">'+esc(a.text)+' <span class="qr-mark">'+Number(ref.ayah).toLocaleString('ar-EG')+'</span> </span>'}$('text').innerHTML=html};
  if(window.QuranMushaf){window.QuranMushaf.render(pageNo,surahNo,ayahNo,(sn,an)=>go(sn,an)).catch(e=>{fallback();say('യഥാർത്ഥ മുസ്ഹഫ് ചിത്രം ലോഡ് ചെയ്യാനായില്ല; ടെക്സ്റ്റ് ബാക്കപ്പ് കാണിക്കുന്നു. '+(e.message||''))})}else fallback();
  $('bookmark').textContent=bookmarks().some(x=>x.surah===surahNo&&x.ayah===ayahNo)?'★ സംരക്ഷിച്ചു':'☆ ബുക്ക്മാർക്ക്';
