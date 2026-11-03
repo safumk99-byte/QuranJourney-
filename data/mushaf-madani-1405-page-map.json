@@ -3,7 +3,7 @@
   "edition": "MADANI_1405",
   "sourceRepository": "https://github.com/quran/quran_android",
   "sourceFile": "pages/data/madani/src/main/kotlin/com/quran/labs/androidquran/pages/data/madani/MadaniDataSource.kt",
-  "sourceCommit": "main (checked 2026-11-03)",
+  "sourceCommit": "feb8f121afbca9c0796cd2e48385eb4747e66c28",
   "publisher": "King Fahd Glorious Quran Printing Complex — Madinah Mushaf 1405H",
   "pageImageProvider": "https://android.quran.com/data/width_{width}/page{page}.png",
   "pageImageVersion": 8,
@@ -732,5 +732,6 @@
     6194,
     6208,
     6222
-  ]
+  ],
+  "sourceLicense": "GPL-3.0 (Quran for Android source repository; source attribution retained)"
 }
