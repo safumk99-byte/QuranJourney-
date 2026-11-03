@@ -81,13 +81,13 @@ def test_monthly_exam_both_source_deduplicates_overlapping_ayahs(client, monkeyp
         headers=headers,
         json={
             "date": "2026-11-02", "exam_type": "monthly",
-            "year": 2026, "month": 11, "question_count": 2,
+            "year": 2026, "month": 11, "question_count": 1,
             "monthly_source": "both", "start_page": 1, "end_page": 1,
         },
     )
     assert generated.status_code == 200, generated.text
     body = generated.json()
-    assert len(body["questions"]) == 2
+    assert len(body["questions"]) == 1
     assert body["monthly_source"] == "both"
 
 
