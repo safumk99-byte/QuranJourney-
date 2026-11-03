@@ -19,7 +19,7 @@ import cloudinary
 import cloudinary.uploader
 import uuid
 from urllib.error import URLError, HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from datetime import date, datetime, timedelta, timezone
 from typing import Generator
 from zoneinfo import ZoneInfo
@@ -701,7 +701,7 @@ _MUSHAF_WIDTHS = {320, 480, 800, 1024, 1260}
 def _load_mushaf_page_image(page: int, width: int) -> bytes:
     url = f"https://android.quran.com/data/width_{width}/page{page:03d}.png"
     try:
-        with urlopen(url, timeout=30) as response:
+        with urlopen(Request(url, headers={"User-Agent": "QuranJourney-Mushaf-Proxy/1.0"}), timeout=30) as response:
             return response.read()
     except (HTTPError, URLError, TimeoutError) as exc:
         raise HTTPException(status_code=502, detail=f"Official Madani Mushaf page {page} is temporarily unavailable.") from exc
@@ -711,7 +711,7 @@ def _load_mushaf_page_image(page: int, width: int) -> bytes:
 def _load_mushaf_ayah_coordinates(width: int) -> dict:
     url = f"https://android.quran.com/data/databases/ayahinfo/ayahinfo_{width}.zip"
     try:
-        with urlopen(url, timeout=45) as response:
+        with urlopen(Request(url, headers={"User-Agent": "QuranJourney-Mushaf-Proxy/1.0"}), timeout=45) as response:
             archive_bytes = response.read()
         with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
             database_names = [name for name in archive.namelist() if name.lower().endswith(".db")]
