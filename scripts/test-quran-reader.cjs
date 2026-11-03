@@ -31,4 +31,6 @@ for(const [name,mutate] of cases){
  catch(e){if(name==='valid complete corpus')throw e;if(!/സൂറത്ത്|ആയത്ത്|ഖുർആൻ|ആകെ|ഡാറ്റ/.test(e.message))throw new Error(name+': unexpected error '+e.message)}
  passed++;
 }
-console.log('PASS: '+passed+' Quran reader corpus validation cases');
+const actual=JSON.parse(fs.readFileSync('data/quran-uthmani.json','utf8'));
+check(actual);
+console.log('PASS: '+passed+' synthetic validation cases + actual bundled Quran corpus');
