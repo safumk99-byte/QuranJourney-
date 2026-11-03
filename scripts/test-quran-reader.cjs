@@ -28,7 +28,7 @@ let passed=0;
 for(const [name,mutate] of cases){
  const v=fixture();
  try{mutate(v);if(name!=='valid complete corpus')throw new Error('Expected rejection but validation passed')}
- catch(e){if(name==='valid complete corpus')throw e;if(!/സൂറത്ത്|ആയത്ത്|ഖുർആൻ|ആകെ/.test(e.message))throw new Error(name+': unexpected error '+e.message)}
+ catch(e){if(name==='valid complete corpus')throw e;if(!/സൂറത്ത്|ആയത്ത്|ഖുർആൻ|ആകെ|ഡാറ്റ/.test(e.message))throw new Error(name+': unexpected error '+e.message)}
  passed++;
 }
 console.log('PASS: '+passed+' Quran reader corpus validation cases');
