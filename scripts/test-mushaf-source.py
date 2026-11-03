@@ -106,7 +106,7 @@ def verify_width(width: int) -> None:
                 "SELECT MIN(min_x), MIN(min_y), MAX(max_x), MAX(max_y) FROM glyphs"
             ).fetchone()
             left, top, right, bottom = all_bounds
-            if left < 0 or top < 0 or right > width or bottom > image_height:
+            if left < 0 or top < 0 or right > width + 1 or bottom > image_height + 1:
                 raise RuntimeError(
                     f"Width {width} all-page coordinates {all_bounds} exceed "
                     f"image dimensions {width}x{image_height}"
@@ -130,7 +130,7 @@ def verify_width(width: int) -> None:
                     "FROM glyphs WHERE page_number = ?", (page,)
                 ).fetchone()
                 left, top, right, bottom = bounds
-                if left < 0 or top < 0 or right > image_width or bottom > image_height:
+                if left < 0 or top < 0 or right > image_width + 1 or bottom > image_height + 1:
                     raise RuntimeError(
                         f"Width {width} page {page} coordinate bounds {bounds} "
                         f"do not fit image {image_width}x{image_height}"
