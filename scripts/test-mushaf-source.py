@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the official Quran for Android MADANI_1405 page and ayah-info assets."""
+"""Verify Quran for Android MADANI_1405 images and matching ayah-info DBs."""
 from __future__ import annotations
 
 import io
@@ -9,7 +9,8 @@ import urllib.request
 import zipfile
 
 BASE = "https://android.quran.com/data"
-WIDTH = 480
+WIDTHS = (480, 800)
+PAGES = (1, 2, 3, 604)
 
 
 def fetch(url: str) -> bytes:
@@ -29,16 +30,24 @@ def png_dimensions(data: bytes) -> tuple[int, int]:
     return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
-def main() -> None:
-    for page in (1, 2, 3, 604):
-        image = fetch(f"{BASE}/width_{WIDTH}/page{page:03d}.png")
-        width, height = png_dimensions(image)
-        if width != WIDTH or height <= 0:
-            raise RuntimeError(f"Unexpected page {page} dimensions: {width}x{height}")
-        print(f"PASS: official Madani page {page:03d}.png ({width}x{height}, {len(image)} bytes)")
+def verify_width(width: int) -> None:
+    image_sizes = {}
+    for page in PAGES:
+        image = fetch(f"{BASE}/width_{width}/page{page:03d}.png")
+        actual_width, height = png_dimensions(image)
+        if actual_width != width or height <= 0:
+            raise RuntimeError(
+                f"Unexpected page {page} dimensions for width {width}: "
+                f"{actual_width}x{height}"
+            )
+        image_sizes[page] = (actual_width, height)
+        print(
+            f"PASS: Madani page {page:03d} at width {width} "
+            f"({actual_width}x{height}, {len(image)} bytes)"
+        )
 
     archive_bytes = fetch(
-        f"{BASE}/databases/ayahinfo/ayahinfo_{WIDTH}.zip"
+        f"{BASE}/databases/ayahinfo/ayahinfo_{width}.zip"
     )
     with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
         candidates = [
@@ -46,7 +55,7 @@ def main() -> None:
             if name.lower().endswith(".db") and "__macosx" not in name.lower()
         ]
         if not candidates:
-            raise RuntimeError("Official ayah-info ZIP contains no SQLite database.")
+            raise RuntimeError(f"Width {width} ayah-info ZIP contains no SQLite database.")
         database_bytes = archive.read(candidates[0])
 
     with tempfile.NamedTemporaryFile(suffix=".db") as database_file:
@@ -59,10 +68,8 @@ def main() -> None:
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-            required = {"glyphs"}
-            if not required.issubset(tables):
-                raise RuntimeError(f"Missing required ayah-info tables: {sorted(required - tables)}")
-            print(f"PASS: ayah-info tables present: {', '.join(sorted(tables))}")
+            if "glyphs" not in tables:
+                raise RuntimeError(f"Width {width} database has no glyph coordinate table.")
 
             columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(glyphs)")
@@ -73,38 +80,54 @@ def main() -> None:
             }
             if not required_columns.issubset(columns):
                 raise RuntimeError(
-                    f"Missing glyph coordinate columns: {sorted(required_columns - columns)}"
+                    f"Width {width} database is missing glyph columns: "
+                    f"{sorted(required_columns - columns)}"
                 )
 
             distinct_ayahs = connection.execute(
                 "SELECT COUNT(DISTINCT CAST(sura_number AS TEXT) || ':' || CAST(ayah_number AS TEXT)) FROM glyphs"
             ).fetchone()[0]
             if distinct_ayahs != 6236:
-                raise RuntimeError(f"Expected 6,236 ayahs in glyph data, found {distinct_ayahs}")
+                raise RuntimeError(
+                    f"Width {width} expected 6,236 ayahs, found {distinct_ayahs}"
+                )
 
-            for page in (1, 2, 3, 604):
+            for page in PAGES:
                 count = connection.execute(
                     "SELECT COUNT(*) FROM glyphs WHERE page_number = ?", (page,)
                 ).fetchone()[0]
                 if count <= 0:
-                    raise RuntimeError(f"No ayah glyph coordinates for page {page}")
-                print(f"PASS: page {page:03d} has {count} matching glyph-coordinate rows")
+                    raise RuntimeError(
+                        f"Width {width} has no glyph coordinates for page {page}"
+                    )
+                image_width, image_height = image_sizes[page]
+                bounds = connection.execute(
+                    "SELECT MIN(min_x), MIN(min_y), MAX(max_x), MAX(max_y) "
+                    "FROM glyphs WHERE page_number = ?", (page,)
+                ).fetchone()
+                left, top, right, bottom = bounds
+                if left < 0 or top < 0 or right > image_width or bottom > image_height:
+                    raise RuntimeError(
+                        f"Width {width} page {page} coordinate bounds {bounds} "
+                        f"do not fit image {image_width}x{image_height}"
+                    )
+                print(
+                    f"PASS: width {width} page {page:03d} has {count} "
+                    f"glyph rows within image bounds"
+                )
 
-            marker_count = (
-                connection.execute("SELECT COUNT(*) FROM ayah_markers").fetchone()[0]
-                if "ayah_markers" in tables else 0
-            )
-            header_count = (
-                connection.execute("SELECT COUNT(*) FROM sura_headers").fetchone()[0]
-                if "sura_headers" in tables else 0
-            )
             print(
-                f"PASS: official ayah-info database ({len(database_bytes)} bytes), "
-                f"{distinct_ayahs} ayahs, {marker_count} optional markers, "
-                f"{header_count} optional surah headers"
+                f"PASS: width {width} official ayah-info DB ({len(database_bytes)} bytes), "
+                f"{distinct_ayahs} ayahs; optional tables: "
+                f"{', '.join(sorted(tables - {'glyphs'})) or 'none'}"
             )
         finally:
             connection.close()
+
+
+def main() -> None:
+    for width in WIDTHS:
+        verify_width(width)
 
 
 if __name__ == "__main__":
