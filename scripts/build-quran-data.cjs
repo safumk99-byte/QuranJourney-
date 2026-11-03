@@ -21,8 +21,10 @@ function fail(m){throw Error('Quran data build failed: '+m)}
   if(Number(s.number)!==n||Number(m.number)!==n)fail('Surah sequence mismatch at '+n);
   const verses=(s.ayahs||[]).filter(a=>Number(a.number)>0);
   const basmalah=s.ayahs.find(a=>Number(a.number)===0);
-  if(n===1||n===9){if(basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');}
+  const embeddedBasmalah=[95,97].includes(n);
+  if(n===1||n===9||embeddedBasmalah){if(basmalah)fail('Surah '+n+' must not contain a separate basmalah entry');}
   else if(!basmalah||!String(basmalah.text||'').trim())fail('Separate Tanzil basmalah entry missing in surah '+n);
+  if(embeddedBasmalah&&!String(verses[0]?.text||'').startsWith('بِّسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ'))fail('Expected verbatim embedded basmalah prefix missing in surah '+n+' ayah 1');
   if(verses.length!==EXPECTED[i])fail('Ayah count mismatch in surah '+n+': '+verses.length);
   const apiAyahs=m.ayahs||[];
   if(apiAyahs.length!==verses.length)fail('Metadata ayah count mismatch in surah '+n);
@@ -32,7 +34,7 @@ function fail(m){throw Error('Quran data build failed: '+m)}
    return {number:j+1,numberInSurah:j+1,text:a.text,page:Number(b.page),juz:Number(b.juz)};
   });
   total+=ayahs.length;
-  out.surahs.push({number:n,name:s.name,basmalah:basmalah?.text||null,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
+  out.surahs.push({number:n,name:s.name,basmalah:basmalah?.text||(embeddedBasmalah?null:null),englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
  }
  if(total!==6236)fail('Expected 6236 ayahs; got '+total);
  const pages=new Set(out.surahs.flatMap(s=>s.ayahs.map(a=>a.page)));
