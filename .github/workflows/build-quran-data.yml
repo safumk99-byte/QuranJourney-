@@ -1,0 +1,38 @@
+name: Build bundled Quran data
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/build-quran-data.cjs
+      - quran.js
+      - exam.js
+      - sw.js
+      - scripts/test-exam-quran-links.cjs
+      - scripts/test-quran-reader.cjs
+      - .github/workflows/build-quran-data.yml
+jobs:
+  build-quran-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check Quran reader JavaScript syntax
+        run: node --check quran.js
+      - name: Check Exam Zone JavaScript syntax
+        run: node --check exam.js
+      - name: Check service worker JavaScript syntax
+        run: node --check sw.js
+      - name: Test Exam Zone Quran ayah links
+        run: node scripts/test-exam-quran-links.cjs
+      - name: Check Quran data builder syntax
+        run: node --check scripts/build-quran-data.cjs
+      - name: Build and validate Quran corpus
+        run: node scripts/build-quran-data.cjs
+      - name: Confirm bundled corpus is present
+        run: test -s data/quran-uthmani.json
+      - name: Test Quran reader corpus validation
+        run: node scripts/test-quran-reader.cjs
