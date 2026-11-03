@@ -30,7 +30,7 @@ function fail(m){throw Error('Quran data build failed: '+m)}
    return {number:j+1,numberInSurah:j+1,text:a.text,page:Number(b.page),juz:Number(b.juz)};
   });
   total+=ayahs.length;
-  out.surahs.push({number:n,name:s.name,basmalah:n!==1&&n!==9?basmalah.text:null,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
+  out.surahs.push({number:n,name:s.name,basmalah:basmalah?.text||null,englishName:m.englishName,englishNameTranslation:m.englishNameTranslation,numberOfAyahs:ayahs.length,revelationType:m.revelationType,ayahs});
  }
  if(total!==6236)fail('Expected 6236 ayahs; got '+total);
  const pages=new Set(out.surahs.flatMap(s=>s.ayahs.map(a=>a.page)));
@@ -41,5 +41,5 @@ function fail(m){throw Error('Quran data build failed: '+m)}
  fs.mkdirSync(path.dirname(target),{recursive:true});
  fs.writeFileSync(target,JSON.stringify(out));
  console.log('Verified '+out.surahs.length+' surahs, '+total+' ayahs, 604 pages and 30 juz.');
- console.log('Text source: Tanzil Project Uthmani v1.1 (CC BY 3.0), unchanged.');
+ console.log('Text source: '+out.metadata.source+' '+out.metadata.version+'; redistributed verbatim under '+out.metadata.license+'.');
 })().catch(e=>{console.error(e);process.exit(1)});
