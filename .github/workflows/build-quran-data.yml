@@ -8,6 +8,7 @@ on:
       - exam.js
       - sw.js
       - scripts/test-exam-quran-links.cjs
+      - scripts/test-quran-reader.cjs
       - .github/workflows/build-quran-data.yml
 jobs:
   build-quran-data:
@@ -27,6 +28,8 @@ jobs:
         run: node --check sw.js
       - name: Test Exam Zone Quran ayah links
         run: node scripts/test-exam-quran-links.cjs
+      - name: Test Quran reader corpus validation
+        run: node scripts/test-quran-reader.cjs
       - name: Check Quran data builder syntax
         run: node --check scripts/build-quran-data.cjs
       - name: Build and validate Quran corpus
