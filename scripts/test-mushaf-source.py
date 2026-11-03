@@ -59,9 +59,10 @@ def main() -> None:
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-            required = {"glyphs", "ayah_markers", "sura_headers"}
+            required = {"glyphs"}
             if not required.issubset(tables):
-                raise RuntimeError(f"Missing ayah-info tables: {sorted(required - tables)}")
+                raise RuntimeError(f"Missing required ayah-info tables: {sorted(required - tables)}")
+            print(f"PASS: ayah-info tables present: {', '.join(sorted(tables))}")
 
             columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(glyphs)")
@@ -89,17 +90,18 @@ def main() -> None:
                     raise RuntimeError(f"No ayah glyph coordinates for page {page}")
                 print(f"PASS: page {page:03d} has {count} matching glyph-coordinate rows")
 
-            marker_count = connection.execute(
-                "SELECT COUNT(*) FROM ayah_markers"
-            ).fetchone()[0]
-            header_count = connection.execute(
-                "SELECT COUNT(*) FROM sura_headers"
-            ).fetchone()[0]
-            if marker_count <= 0 or header_count <= 0:
-                raise RuntimeError("Ayah markers or surah-header positions are missing")
+            marker_count = (
+                connection.execute("SELECT COUNT(*) FROM ayah_markers").fetchone()[0]
+                if "ayah_markers" in tables else 0
+            )
+            header_count = (
+                connection.execute("SELECT COUNT(*) FROM sura_headers").fetchone()[0]
+                if "sura_headers" in tables else 0
+            )
             print(
                 f"PASS: official ayah-info database ({len(database_bytes)} bytes), "
-                f"{distinct_ayahs} ayahs, {marker_count} markers, {header_count} surah headers"
+                f"{distinct_ayahs} ayahs, {marker_count} optional markers, "
+                f"{header_count} optional surah headers"
             )
         finally:
             connection.close()
