@@ -198,9 +198,10 @@ def test_parent_cannot_read_any_record_type_for_unlinked_student(client):
     parent_token = login(client, "parent_link_scope", "Parent-Link-Scope-123!").json()["access_token"]
     parent_headers = auth(parent_token)
 
-    assert client.get(f"/students/{unlinked['id']}/reading", headers=parent_headers).status_code == 403
-    assert client.get(f"/students/{unlinked['id']}/attendance", headers=parent_headers).status_code == 403
-    assert client.get(f"/students/{unlinked['id']}/marks", headers=parent_headers).status_code == 403
+    # Unlinked student IDs are intentionally indistinguishable from missing students.
+    assert client.get(f"/students/{unlinked['id']}/reading", headers=parent_headers).status_code == 404
+    assert client.get(f"/students/{unlinked['id']}/attendance", headers=parent_headers).status_code == 404
+    assert client.get(f"/students/{unlinked['id']}/marks", headers=parent_headers).status_code == 404
     assert client.get(f"/students/{linked['id']}/reading", headers=parent_headers).status_code == 200
     assert client.get(f"/students/{linked['id']}/attendance", headers=parent_headers).status_code == 200
     assert client.get(f"/students/{linked['id']}/marks", headers=parent_headers).status_code == 200
