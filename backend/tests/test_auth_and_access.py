@@ -44,7 +44,8 @@ def test_parent_cannot_read_unlinked_student_records(client):
     client.post("/parents", headers=headers, json={"login_id":"parent_test", "password":"Parent-Test-Password-123!", "student_ids":[first["id"]]})
     parent_token = login(client, "parent_test", "Parent-Test-Password-123!").json()["access_token"]
     denied = client.get(f"/students/{other['id']}/reading", headers=auth(parent_token))
-    assert denied.status_code == 403
+    # Parent access deliberately returns 404 so unlinked student IDs cannot be enumerated.
+    assert denied.status_code == 404
 
 def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     token = login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"]
@@ -273,11 +274,17 @@ def test_frontend_api_contract_teacher_to_parent_read_flow(client):
     # These are the response fields consumed by parent.js.
     children = client.get("/students", headers=parent_headers)
     assert children.status_code == 200
-    assert children.json() == [{
+    assert len(children.json()) == 1
+    child = children.json()[0]
+    # Assert the stable fields consumed by parent.js while allowing additive dashboard fields.
+    assert {key: child.get(key) for key in (
+        "id", "student_code", "name", "class_name", "total_pages",
+        "completed_pages", "current_juz", "journey_start_date", "photo_data"
+    )} == {
         "id": student_id, "student_code": "QJ-CONTRACT-001", "name": "Contract Test Child",
         "class_name": "Hifz A", "total_pages": 604, "completed_pages": 2,
         "current_juz": 1, "journey_start_date": None, "photo_data": None
-    }]
+    }
 
     reading = client.get(f"/students/{student_id}/reading", headers=parent_headers).json()
     attendance = client.get(f"/students/{student_id}/attendance", headers=parent_headers).json()
