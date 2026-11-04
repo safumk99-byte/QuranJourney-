@@ -700,3 +700,91 @@ img{max-width:100%}
 .student-detail-page .daily-date-group .daily-history{min-width:850px}
 .student-detail-page .daily-date-group .daily-history td{max-width:280px}
 @media(max-width:600px){.student-detail-page .daily-date-group{padding:10px}.student-detail-page .daily-date-heading{align-items:flex-start}.student-detail-page .daily-date-heading .mini-btn{white-space:nowrap}}
+
+
+/* Daily progress table: preserve readable column widths on narrow screens. */
+.student-detail-page main.container > .panel,
+.student-detail-page #entryRows,
+.student-detail-page #entryRows.table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+.student-detail-page #entryRows.table-wrap {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.student-detail-page #entryRows .daily-history {
+  width: max-content;
+  min-width: 1050px;
+  table-layout: auto;
+}
+.student-detail-page #entryRows .daily-history th,
+.student-detail-page #entryRows .daily-history td {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.student-detail-page #entryRows .daily-history th:first-child,
+.student-detail-page #entryRows .daily-history td:first-child {
+  width: 155px;
+  min-width: 155px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+.student-detail-page #entryRows .daily-history td:first-child > span {
+  display: block;
+  white-space: nowrap;
+  word-break: keep-all;
+  line-height: 1.5;
+  margin-bottom: 7px;
+}
+.student-detail-page #entryRows .daily-history td:first-child .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  line-height: 1.2;
+}
+.student-detail-page #entryRows .daily-history th:nth-child(2),
+.student-detail-page #entryRows .daily-history td:nth-child(2),
+.student-detail-page #entryRows .daily-history th:nth-child(4),
+.student-detail-page #entryRows .daily-history td:nth-child(4),
+.student-detail-page #entryRows .daily-history th:nth-child(5),
+.student-detail-page #entryRows .daily-history td:nth-child(5) {
+  min-width: 190px;
+}
+.student-detail-page #entryRows .daily-history th:nth-child(3),
+.student-detail-page #entryRows .daily-history td:nth-child(3),
+.student-detail-page #entryRows .daily-history th:nth-child(8),
+.student-detail-page #entryRows .daily-history td:nth-child(8) {
+  min-width: 105px;
+  white-space: nowrap;
+}
+.student-detail-page #entryRows .daily-history th:nth-child(6),
+.student-detail-page #entryRows .daily-history td:nth-child(6),
+.student-detail-page #entryRows .daily-history th:nth-child(7),
+.student-detail-page #entryRows .daily-history td:nth-child(7) {
+  min-width: 135px;
+}
+@media (max-width: 560px) {
+  .student-detail-page #entryRows.table-wrap {
+    margin-right: 0;
+    border-radius: 12px;
+    touch-action: pan-x pan-y;
+  }
+  .student-detail-page #entryRows .daily-history {
+    min-width: 1120px;
+  }
+}
