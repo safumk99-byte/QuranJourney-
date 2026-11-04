@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pwdlib import PasswordHash
-from sqlalchemy import UniqueConstraint, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, text as sql_text
+from sqlalchemy import UniqueConstraint, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, func, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
@@ -1259,7 +1259,9 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         if not ids:
             return []
         query = query.where(Student.id.in_(ids))
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "current_juz": s.current_juz, "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in db.scalars(query.order_by(Student.name)).all()]
+    student_rows = db.scalars(query.order_by(Student.name)).all()
+    lesson_days = dict(db.execute(select(ReadingEntry.student_id, func.count(func.distinct(ReadingEntry.entry_date))).where(ReadingEntry.student_id.in_([s.id for s in student_rows] or [-1]), func.cast(ReadingEntry.pages, Float) > 0).group_by(ReadingEntry.student_id)).all())
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": s.current_juz, "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
