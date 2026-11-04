@@ -691,17 +691,6 @@ img{max-width:100%}
 @media(max-width:700px){.qj-account-btn{font-size:12px;padding:8px}.qj-password-dialog{padding:24px 18px}.qj-password-actions{flex-direction:column-reverse}.qj-password-actions button{width:100%}}
 
 
-/* Date-wise progress tables: one independent table per calendar date. */
-.student-detail-page .daily-date-list{display:grid;gap:18px}
-.student-detail-page .daily-date-group{min-width:0;border:1px solid var(--border,#dce5ec);border-radius:14px;padding:14px;background:var(--panel,#fff)}
-.student-detail-page .daily-date-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-.student-detail-page .daily-date-heading h3{margin:0;color:var(--text,#173d30);font-size:17px}
-.student-detail-page .daily-date-heading span{display:block;margin-top:4px;color:var(--muted,#65766f);font-size:12px}
-.student-detail-page .daily-date-group .daily-history{min-width:850px}
-.student-detail-page .daily-date-group .daily-history td{max-width:280px}
-@media(max-width:600px){.student-detail-page .daily-date-group{padding:10px}.student-detail-page .daily-date-heading{align-items:flex-start}.student-detail-page .daily-date-heading .mini-btn{white-space:nowrap}}
-
-
 /* Daily progress table: preserve readable column widths on narrow screens. */
 .student-detail-page main.container > .panel,
 .student-detail-page #entryRows,
