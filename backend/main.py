@@ -1814,8 +1814,15 @@ def _period_bounds(day: date, kind: str):
     return start, next_month - timedelta(days=1)
 
 
+# Carry-forward reset: ignore all target deficits and reading totals before this week.
+# Keep this as a fixed launch date; do not calculate it from today's weekday, or the
+# reset would move forward every Monday and erase legitimate weekly carry-forward.
+TARGET_CARRY_RESET_DATE = date(2026, 11, 2)
+
+
 def _target_period(student: Student, kind: str, today: date, holidays: list[CalendarHoliday], db: Session):
     start_date = student.journey_start_date or today
+    calculation_start = max(start_date, TARGET_CARRY_RESET_DATE)
     target_date = start_date.replace(year=start_date.year + 3, day=min(start_date.day, 28) if start_date.month == 2 and start_date.day == 29 else start_date.day)
     # Fixed pace for the full three-year journey: new holiday entries must not
     # change the daily baseline of already elapsed periods.
@@ -1823,10 +1830,10 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     base_working_days = sum(1 for offset in range(journey_days) if (start_date + timedelta(days=offset)).weekday() != 4)
     daily_required = float(student.total_pages or 0) / max(1, base_working_days)
     start, end = _period_bounds(today, kind)
-    if end < start_date or start_date > today:
+    if end < calculation_start or calculation_start > today or calculation_start > target_date:
         return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
-    cursor = start_date - timedelta(days=start_date.weekday()) if kind == "week" else start_date.replace(day=1)
-    reading_rows = db.execute(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= start_date, ReadingEntry.entry_date <= today)).all()
+    cursor = calculation_start - timedelta(days=calculation_start.weekday()) if kind == "week" else calculation_start.replace(day=1)
+    reading_rows = db.execute(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= calculation_start, ReadingEntry.entry_date <= today)).all()
     pages_by_date = {}
     for entry_day, page_value in reading_rows:
         pages_by_date[entry_day] = pages_by_date.get(entry_day, 0.0) + reading_page_count(page_value)
@@ -1842,7 +1849,7 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         last = min(pend, today)
         cutoff = datetime.combine(min(pend, today), datetime.max.time(), tzinfo=timezone.utc)
         effective_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= cutoff}
-        period_first = max(pstart, start_date)
+        period_first = max(pstart, calculation_start)
         working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
         base = daily_required * working_days
         actual = sum(value for entry_day, value in pages_by_date.items() if period_first <= entry_day <= last)
