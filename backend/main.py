@@ -1821,55 +1821,88 @@ TARGET_CARRY_RESET_DATE = date(2026, 11, 2)
 
 
 def _target_period(student: Student, kind: str, today: date, holidays: list[CalendarHoliday], db: Session):
+    """Build weekly/monthly progress from the Dashboard's live three-year required pace.
+
+    Carry-forward starts at zero on TARGET_CARRY_RESET_DATE. Each completed period's
+    shortfall is carried into the next period; overachievement clears the shortfall.
+    """
     start_date = student.journey_start_date or today
-    calculation_start = max(start_date, TARGET_CARRY_RESET_DATE)
-    target_date = start_date.replace(year=start_date.year + 3, day=min(start_date.day, 28) if start_date.month == 2 and start_date.day == 29 else start_date.day)
-    # Fixed pace for the full three-year journey: new holiday entries must not
-    # change the daily baseline of already elapsed periods.
-    journey_days = max(1, (target_date - start_date).days + 1)
-    base_working_days = sum(1 for offset in range(journey_days) if (start_date + timedelta(days=offset)).weekday() != 4)
-    daily_required = float(student.total_pages or 0) / max(1, base_working_days)
+    target_date = start_date.replace(
+        year=start_date.year + 3,
+        day=min(start_date.day, 28) if start_date.month == 2 and start_date.day == 29 else start_date.day,
+    )
+    target_days = (target_date - today).days
+    remaining_pages = max(0.0, float(student.total_pages or 0) - float(student.completed_pages or 0))
+    required_daily = remaining_pages / target_days if remaining_pages > 0 and target_days > 0 else 0.0
+    dashboard_base = required_daily * (7.0 if kind == "week" else 30.4375)
+
     start, end = _period_bounds(today, kind)
-    if end < calculation_start or calculation_start > today or calculation_start > target_date:
-        return {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": 0, "carry_in": 0, "target": 0, "completed": 0, "remaining": 0, "working_days": 0, "status": "Not started"}
-    cursor = calculation_start - timedelta(days=calculation_start.weekday()) if kind == "week" else calculation_start.replace(day=1)
-    reading_rows = db.execute(select(ReadingEntry.entry_date, ReadingEntry.pages).where(ReadingEntry.student_id == student.id, ReadingEntry.entry_date >= calculation_start, ReadingEntry.entry_date <= today)).all()
+    calculation_start = max(start_date, TARGET_CARRY_RESET_DATE)
+    if calculation_start > today or calculation_start > target_date:
+        return {"period_start": start.isoformat(), "period_end": end.isoformat(),
+                "base_target": round(dashboard_base, 2), "carry_in": 0,
+                "target": round(dashboard_base, 2), "completed": 0,
+                "remaining": round(dashboard_base, 2), "working_days": 0,
+                "total_working_days": 0, "status": "Not started"}
+
+    rows = db.execute(
+        select(ReadingEntry.entry_date, ReadingEntry.pages).where(
+            ReadingEntry.student_id == student.id,
+            ReadingEntry.entry_date >= calculation_start,
+            ReadingEntry.entry_date <= today,
+        )
+    ).all()
     pages_by_date = {}
-    for entry_day, page_value in reading_rows:
+    for entry_day, page_value in rows:
         pages_by_date[entry_day] = pages_by_date.get(entry_day, 0.0) + reading_page_count(page_value)
+
+    cursor = calculation_start - timedelta(days=calculation_start.weekday()) if kind == "week" else calculation_start.replace(day=1)
     carry = 0.0
     current = None
     while cursor <= end:
         if kind == "week":
-            pstart, pend, next_cursor = cursor, cursor + timedelta(days=6), cursor + timedelta(days=7)
+            period_start, period_end = cursor, cursor + timedelta(days=6)
+            next_cursor = cursor + timedelta(days=7)
+            period_base = required_daily * 7.0
         else:
-            pstart = cursor
+            period_start = cursor
             next_cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
-            pend = next_cursor - timedelta(days=1)
-        last = min(pend, today)
-        cutoff = datetime.combine(min(pend, today), datetime.max.time(), tzinfo=timezone.utc)
-        effective_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= cutoff}
-        period_first = max(pstart, calculation_start)
-        working_days = sum(1 for offset in range(max(0, (last - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in effective_holidays)
-        base = daily_required * working_days
-        actual = sum(value for entry_day, value in pages_by_date.items() if period_first <= entry_day <= last)
-        carry_in = carry
-        required = base + carry_in
-        period_remaining = max(0.0, required - actual)
-        if pstart == start:
-            if kind == "month":
-                known_holidays = {h.holiday_date for h in holidays if h.created_at and h.created_at <= datetime.now(timezone.utc)}
-                total_working_days = sum(1 for offset in range(max(0, (pend - period_first).days + 1)) if (period_first + timedelta(days=offset)).weekday() != 4 and (period_first + timedelta(days=offset)) not in known_holidays)
-                full_month_base = daily_required * total_working_days
-                full_month_target = full_month_base + carry_in
-                full_month_remaining = max(0.0, full_month_target - actual)
-                current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(full_month_base, 2), "carry_in": round(carry_in, 2), "target": round(full_month_target, 2), "completed": round(actual, 2), "remaining": round(full_month_remaining, 2), "working_days": working_days, "total_working_days": total_working_days, "status": "Met" if full_month_remaining <= 0.001 else "Pending"}
-            else:
-                current = {"period_start": start.isoformat(), "period_end": end.isoformat(), "base_target": round(base, 2), "carry_in": round(carry_in, 2), "target": round(required, 2), "completed": round(actual, 2), "remaining": round(period_remaining, 2), "working_days": working_days, "total_working_days": working_days, "status": "Met" if period_remaining <= 0.001 else "Pending"}
-        carry = period_remaining
-        cursor = next_cursor
-    return current
+            period_end = next_cursor - timedelta(days=1)
+            period_base = required_daily * 30.4375
 
+        effective_start = max(period_start, calculation_start)
+        effective_end = min(period_end, today)
+        completed = sum(
+            value for entry_day, value in pages_by_date.items()
+            if effective_start <= entry_day <= effective_end
+        ) if effective_end >= effective_start else 0.0
+        carry_in = carry
+        total_target = period_base + carry_in
+        remaining = max(0.0, total_target - completed)
+        if period_start == start:
+            elapsed_days = max(0, (effective_end - effective_start).days + 1) if effective_end >= effective_start else 0
+            total_days = max(0, (period_end - effective_start).days + 1)
+            current = {
+                "period_start": start.isoformat(),
+                "period_end": end.isoformat(),
+                "base_target": round(dashboard_base, 2),
+                "carry_in": round(carry_in, 2),
+                "target": round(dashboard_base + carry_in, 2),
+                "completed": round(completed, 2),
+                "remaining": round(max(0.0, dashboard_base + carry_in - completed), 2),
+                "working_days": elapsed_days,
+                "total_working_days": total_days,
+                "status": "Met" if completed + 0.001 >= dashboard_base + carry_in else "Pending",
+            }
+        carry = remaining
+        cursor = next_cursor
+    return current or {
+        "period_start": start.isoformat(), "period_end": end.isoformat(),
+        "base_target": round(dashboard_base, 2), "carry_in": 0,
+        "target": round(dashboard_base, 2), "completed": 0,
+        "remaining": round(dashboard_base, 2), "working_days": 0,
+        "total_working_days": 0, "status": "Pending",
+    }
 
 @app.get("/targets/summary")
 def targets_summary(user: User = Depends(current_user), db: Session = Depends(get_db)):
