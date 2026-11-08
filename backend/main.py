@@ -118,6 +118,8 @@ class CalendarHoliday(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     holiday_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
     reason: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    class_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -125,6 +127,8 @@ class CalendarHoliday(Base):
 class CalendarHolidayInput(BaseModel):
     holiday_date: date
     reason: str | None = Field(default=None, max_length=240)
+    class_name: str | None = Field(default=None, max_length=100)
+    category: str | None = Field(default=None, max_length=80)
 
     @field_validator("reason")
     @classmethod
@@ -1039,6 +1043,14 @@ def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    # Additive holiday scope migration for existing databases.
+    from sqlalchemy import inspect
+    holiday_columns = {c["name"] for c in inspect(engine).get_columns("calendar_holidays")}
+    with engine.begin() as conn:
+        if "class_name" not in holiday_columns:
+            conn.execute(sql_text("ALTER TABLE calendar_holidays ADD COLUMN class_name VARCHAR(100) NULL"))
+        if "category" not in holiday_columns:
+            conn.execute(sql_text("ALTER TABLE calendar_holidays ADD COLUMN category VARCHAR(80) NULL"))
     # Additive auth-version migration for existing accounts.
     from sqlalchemy import inspect
     if "auth_token_version" not in {c["name"] for c in inspect(engine).get_columns("users")}:
@@ -1763,12 +1775,12 @@ def points_leaderboard(year: int = Query(default=date.today().year, ge=2000, le=
 @app.get("/calendar/holidays")
 def list_calendar_holidays(user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.scalars(select(CalendarHoliday).order_by(CalendarHoliday.holiday_date)).all()
-    return [{"id": r.id, "date": r.holiday_date.isoformat(), "reason": r.reason} for r in rows]
+    return [{"id": r.id, "date": r.holiday_date.isoformat(), "reason": r.reason, "class_name": r.class_name, "category": r.category} for r in rows]
 
 
 @app.post("/calendar/holidays", status_code=201)
 def create_calendar_holiday(data: CalendarHolidayInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
-    row = CalendarHoliday(holiday_date=data.holiday_date, reason=data.reason)
+    row = CalendarHoliday(holiday_date=data.holiday_date, reason=data.reason, class_name=data.class_name, category=data.category)
     db.add(row)
     try:
         db.commit()
@@ -1776,7 +1788,7 @@ def create_calendar_holiday(data: CalendarHolidayInput, user: User = Depends(req
         db.rollback()
         raise HTTPException(status_code=409, detail="A holiday is already registered for this date")
     db.refresh(row)
-    return {"id": row.id, "date": row.holiday_date.isoformat(), "reason": row.reason}
+    return {"id": row.id, "date": row.holiday_date.isoformat(), "reason": row.reason, "class_name": row.class_name, "category": row.category}
 
 
 @app.patch("/calendar/holidays/{holiday_id}")
@@ -1785,6 +1797,7 @@ def update_calendar_holiday(holiday_id: int, data: CalendarHolidayInput, user: U
     if row is None:
         raise HTTPException(status_code=404, detail="Holiday not found")
     row.holiday_date, row.reason = data.holiday_date, data.reason
+    row.class_name, row.category = data.class_name, data.category
     row.updated_at = datetime.now(timezone.utc)
     try:
         db.commit()
@@ -2029,6 +2042,9 @@ def get_monthly_attendance_score(
         else:
             working_query = working_query.where(Attendance.student_id == student_id)
     working_dates = set(db.scalars(working_query.distinct()).all())
+    holiday_rows = db.scalars(select(CalendarHoliday).where(CalendarHoliday.holiday_date >= start, CalendarHoliday.holiday_date < end)).all()
+    excluded_dates = {h.holiday_date for h in holiday_rows if not h.class_name or h.class_name == (student.class_name or "Unassigned class")}
+    working_dates.difference_update(excluded_dates)
 
     student_rows = db.scalars(select(Attendance).where(
         Attendance.student_id == student_id,
@@ -2037,7 +2053,8 @@ def get_monthly_attendance_score(
     ).order_by(Attendance.attendance_date, Attendance.period, Attendance.id)).all()
     statuses_by_date: dict[date, list[str]] = {}
     for row in student_rows:
-        statuses_by_date.setdefault(row.attendance_date, []).append((row.status or "").lower())
+        if row.attendance_date not in excluded_dates:
+            statuses_by_date.setdefault(row.attendance_date, []).append((row.status or "").lower())
 
     present_days = sum(
         1 for day_statuses in statuses_by_date.values()
@@ -2073,6 +2090,10 @@ def add_attendance(student_id: int, data: AttendanceInput, user: User = Depends(
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     day = data.attendance_date.date()
+    student = db.get(Student, student_id)
+    no_class = db.scalar(select(CalendarHoliday).where(CalendarHoliday.holiday_date == day).limit(1))
+    if no_class and (not no_class.class_name or no_class.class_name == (student.class_name or "Unassigned class")):
+        raise HTTPException(status_code=409, detail="No class is scheduled for this date: " + (no_class.reason or no_class.category or "No class"))
     row = db.scalar(select(Attendance).where(Attendance.student_id == student_id, Attendance.attendance_date == day, Attendance.period == data.period).order_by(Attendance.id.desc()))
     previous_status = row.status if row else None
     if row:
