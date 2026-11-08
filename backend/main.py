@@ -1909,12 +1909,14 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
                 "period_end": end.isoformat(),
                 "base_target": round(dashboard_base, 2),
                 "carry_in": round(carry_in, 2),
-                "target": round(dashboard_base + carry_in, 2),
+                "target": round(period_base + carry_in, 2),
                 "completed": round(completed, 2),
-                "remaining": round(max(0.0, dashboard_base + carry_in - completed), 2),
+                "remaining": round(max(0.0, period_base + carry_in - completed), 2),
                 "working_days": elapsed_days,
                 "total_working_days": total_days,
-                "status": "Met" if completed + 0.001 >= dashboard_base + carry_in else "Pending",
+                "no_class_days": len(closed_dates),
+                "excluded_pages": round(required_daily * len(closed_dates), 2),
+                "status": "Met" if completed + 0.001 >= period_base + carry_in else "Pending",
             }
         carry = remaining
         cursor = next_cursor
