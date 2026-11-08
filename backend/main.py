@@ -1924,8 +1924,8 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
                 "remaining": round(max(0.0, period_base + carry_in - completed), 2),
                 "working_days": elapsed_days,
                 "total_working_days": total_days,
-                "no_class_days": len(closed_dates),
-                "excluded_pages": round(required_daily * len(closed_dates), 2),
+                "no_class_days": closed_in_target_window,
+                "excluded_pages": round(required_daily * closed_in_target_window, 2),
                 "status": "Met" if completed + 0.001 >= period_base + carry_in else "Pending",
             }
         carry = remaining
