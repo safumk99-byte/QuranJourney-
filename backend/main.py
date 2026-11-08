@@ -1819,8 +1819,9 @@ def delete_calendar_holiday(holiday_id: int, user: User = Depends(require_teache
 
 def _period_bounds(day: date, kind: str):
     if kind == "week":
-        start = day - timedelta(days=day.weekday())
-        return start, start + timedelta(days=6)
+        # Weekly target runs Saturday through Thursday; Friday is excluded.
+        start = day - timedelta(days=(day.weekday() - 5) % 7)
+        return start, start + timedelta(days=5)
     start = day.replace(day=1)
     next_month = start.replace(day=28) + timedelta(days=4)
     next_month = next_month.replace(day=1)
@@ -1829,7 +1830,7 @@ def _period_bounds(day: date, kind: str):
 
 # Carry-forward reset: ignore all target deficits and reading totals before this week.
 # Keep this as a fixed launch date; do not calculate it from today's weekday, or the
-# reset would move forward every Monday and erase legitimate weekly carry-forward.
+# reset would move forward every Saturday and erase legitimate weekly carry-forward.
 TARGET_CARRY_RESET_DATE = date(2026, 11, 2)
 
 
@@ -1847,7 +1848,8 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     target_days = (target_date - today).days
     remaining_pages = max(0.0, float(student.total_pages or 0) - float(student.completed_pages or 0))
     required_daily = remaining_pages / target_days if remaining_pages > 0 and target_days > 0 else 0.0
-    dashboard_base = required_daily * (7.0 if kind == "week" else 30.4375)
+    # Saturday–Thursday contains six target days; Friday is outside the weekly cycle.
+    dashboard_base = required_daily * (6.0 if kind == "week" else 30.4375)
 
     start, end = _period_bounds(today, kind)
     calculation_start = max(start_date, TARGET_CARRY_RESET_DATE)
@@ -1869,12 +1871,15 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     for entry_day, page_value in rows:
         pages_by_date[entry_day] = pages_by_date.get(entry_day, 0.0) + reading_page_count(page_value)
 
-    cursor = calculation_start - timedelta(days=calculation_start.weekday()) if kind == "week" else calculation_start.replace(day=1)
+    cursor = (
+        calculation_start - timedelta(days=(calculation_start.weekday() - 5) % 7)
+        if kind == "week" else calculation_start.replace(day=1)
+    )
     carry = 0.0
     current = None
     while cursor <= end:
         if kind == "week":
-            period_start, period_end = cursor, cursor + timedelta(days=6)
+            period_start, period_end = cursor, cursor + timedelta(days=5)
             next_cursor = cursor + timedelta(days=7)
         else:
             period_start = cursor
@@ -1887,10 +1892,15 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
             if (not holiday.class_name or holiday.class_name == (student.class_name or "Unassigned class"))
             and period_start <= holiday.holiday_date <= period_end
         }
-        calendar_days = (period_end - period_start).days + 1
-        period_base = required_daily * max(0, calendar_days - len(closed_dates))
-
+        # If the carry-forward reset or journey start falls mid-period, count only
+        # eligible dates from that effective start. Fridays are never in this range.
         effective_start = max(period_start, calculation_start)
+        eligible_start = effective_start
+        eligible_days = max(0, (period_end - eligible_start).days + 1)
+        closed_in_target_window = sum(
+            1 for closed_day in closed_dates if eligible_start <= closed_day <= period_end
+        )
+        period_base = required_daily * max(0, eligible_days - closed_in_target_window)
         effective_end = min(period_end, today)
         completed = sum(
             value for entry_day, value in pages_by_date.items()
