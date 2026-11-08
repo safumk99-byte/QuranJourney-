@@ -1876,12 +1876,19 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         if kind == "week":
             period_start, period_end = cursor, cursor + timedelta(days=6)
             next_cursor = cursor + timedelta(days=7)
-            period_base = required_daily * 7.0
         else:
             period_start = cursor
             next_cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
             period_end = next_cursor - timedelta(days=1)
-            period_base = required_daily * 30.4375
+
+        # No-class days reduce this period's required workload, not the three-year pace.
+        closed_dates = {
+            holiday.holiday_date for holiday in holidays
+            if (not holiday.class_name or holiday.class_name == (student.class_name or "Unassigned class"))
+            and period_start <= holiday.holiday_date <= period_end
+        }
+        calendar_days = (period_end - period_start).days + 1
+        period_base = required_daily * max(0, calendar_days - len(closed_dates))
 
         effective_start = max(period_start, calculation_start)
         effective_end = min(period_end, today)
@@ -1894,7 +1901,9 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         remaining = max(0.0, total_target - completed)
         if period_start == start:
             elapsed_days = max(0, (effective_end - effective_start).days + 1) if effective_end >= effective_start else 0
+            elapsed_days -= sum(1 for closed_day in closed_dates if effective_start <= closed_day <= effective_end)
             total_days = max(0, (period_end - effective_start).days + 1)
+            total_days -= sum(1 for closed_day in closed_dates if effective_start <= closed_day <= period_end)
             current = {
                 "period_start": start.isoformat(),
                 "period_end": end.isoformat(),
