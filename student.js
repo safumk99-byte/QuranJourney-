@@ -21,7 +21,7 @@ function clearError(){const n=$('studentApiError');if(n)n.textContent=''}
 function dateValue(v){return String(v||'').slice(0,10)}
 function pagesValue(v){const n=Number(v);return Number.isFinite(n)&&n>0?n:0}
 function entryPages(e){return pagesValue(e.pages)}
-function pageLabel(v){const n=pagesValue(v);return n===0.5?'½ page':n===0.75?'¾ page':n===1.5?'1½ pages':n===2.5?'2½ pages':n===3.5?'3½ pages':n===4.5?'4½ pages':n+' '+(n===1?'page':'pages')}
+function pageLabel(v){const n=pagesValue(v);const fractions={0.5:'½',0.75:'¾',1.5:'1½',1.75:'1¾',2.5:'2½',2.75:'2¾',3.5:'3½',3.75:'3¾',4.5:'4½',4.75:'4¾'};return (fractions[n]||String(n))+' '+(n===1?'page':'pages')}
 function entryDate(e){return dateValue(e.date||e.entry_date)}
 function activityPoints(e){return Math.round(pagesValue(e.pages)*10)+pagesValue(e.recent_pages)+pagesValue(e.general_pages)}function pointsForDate(date){const total=entries.filter(e=>entryDate(e)===date).reduce((sum,e)=>sum+activityPoints(e),0);return Number(total.toFixed(1))}function pageLabel(v){const n=pagesValue(v);return n===0.5?'½ page':n===1.5?'1½ pages':n===2.5?'2½ pages':n===3.5?'3½ pages':n===4.5?'4½ pages':n+' '+(n===1?'page':'pages')}
 function attendanceForDate(date){const rows=attendance.filter(a=>dateValue(a.date)===date).sort((a,b)=>Number(a.period||0)-Number(b.period||0));if(!rows.length)return '—';const labels={present:'Present',late:'Late',absent:'Absent',leave:'Leave'};return rows.map(a=>{const period=Number(a.period);const prefix=Number.isFinite(period)&&period>0?'P'+period+': ':'';const status=String(a.status||'').toLowerCase();return prefix+(labels[status]||String(a.status||'Unknown'))}).map(esc).join(' · ')}
