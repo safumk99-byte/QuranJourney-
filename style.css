@@ -788,3 +788,9 @@ img{max-width:100%}
 .refresh-pill:hover .refresh-icon{transform:rotate(90deg)}
 .refresh-pill:active{transform:scale(.96)}
 @media(max-width:560px){.refresh-pill{padding:7px 9px;gap:4px;font-size:10px}.refresh-icon{font-size:17px}}
+
+/* Dashboard refresh action: visible beside the mobile menu toggle. */
+.qj-refresh-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:0 13px;border:1px solid #dce8df;border-radius:11px;background:#fff;color:#14543d;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.qj-refresh-btn span:first-child{font-size:20px;line-height:1}
+.qj-refresh-btn:hover{background:#edf7f0;border-color:#bcd9c7}
+@media(max-width:760px){.qj-refresh-btn{margin-left:auto;min-height:43px;padding:0 11px}.qj-refresh-label{display:none}.qj-menu-toggle{margin-left:0}}
