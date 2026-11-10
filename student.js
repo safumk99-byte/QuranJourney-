@@ -12,7 +12,7 @@ function fillSurahs(){for(const prefix of RANGE_PREFIXES){const ids=rangeIds(pre
 const sameSurahBtn=$('sameSurahBtn');if(sameSurahBtn)sameSurahBtn.addEventListener('click',()=>{const start=$('startSurah').value;if(!start){showError('Please select Start Surah first.');$('startSurah').focus();return}const endAyahBefore=$('endAyah').value;$('endSurah').value=start;$('endSurah').dispatchEvent(new Event('change',{bubbles:true}));fillAyahs('endAyah','endSurah',endAyahBefore);clearError();sameSurahBtn.classList.add('is-used');setTimeout(()=>sameSurahBtn.classList.remove('is-used'),450)});
 function setFullEndAyah(prefix,button){const ids=rangeIds(prefix),surahNumber=Number($(ids.es).value),lastAyah=SURAHS[surahNumber-1]?.count||0;if(!lastAyah){showError('Please select End Surah first.');$(ids.es).focus();return}$(ids.ea).value=String(lastAyah);clearError();button.classList.add('is-used');setTimeout(()=>button.classList.remove('is-used'),450)}
 [['recent',$('recentFullBtn')],['general',$('generalFullBtn')]].forEach(([prefix,button])=>{if(button)button.addEventListener('click',()=>setFullEndAyah(prefix,button))});
-function validSurahAyahSection(section){const prefix=section==='lesson'?'':section==='recent'?'recent':'general',ids=rangeIds(prefix),ss=Number($(ids.ss).value),sa=Number($(ids.sa).value),es=Number($(ids.es).value),ea=Number($(ids.ea).value);if(!ss||!sa||!es||!ea||!SURAHS[ss-1]||!SURAHS[es-1]||sa>SURAHS[ss-1].count||ea>SURAHS[es-1].count){showError('Please check the Surah and Ayah range. Each Ayah must exist in its selected Surah.');return false}if(ss>es||(ss===es&&sa>ea)){showError('The ending Surah and Ayah must be the same as or later than the starting point.');return false}return true}
+function validSurahAyahSection(section){const prefix=section==='lesson'?'':section==='recent'?'recent':'general',ids=rangeIds(prefix),ss=Number($(ids.ss).value),sa=Number($(ids.sa).value),es=Number($(ids.es).value),ea=Number($(ids.ea).value);if(!ss||!sa||!es||!ea||!SURAHS[ss-1]||!SURAHS[es-1]||sa>SURAHS[ss-1].count||ea>SURAHS[es-1].count){showError('Please check the Surah and Ayah range. Each Ayah must exist in its selected Surah.');return false}return true}
 function progressRange(e){const value=(snake,camel)=>e[snake]??e[camel]??null;const ss=Number(value('start_surah','startSurah')),sa=Number(value('start_ayah','startAyah')),es=Number(value('end_surah','endSurah')),ea=Number(value('end_ayah','endAyah'));if(!ss||!sa||!es||!ea||!SURAHS[ss-1]||!SURAHS[es-1])return '';return SURAHS[ss-1].name+' '+sa+' → '+SURAHS[es-1].name+' '+ea}
 
 const errorBox=()=>{let n=$('studentApiError');if(!n){n=document.createElement('p');n.id='studentApiError';n.setAttribute('role','alert');n.style.cssText='color:#a61b1b;font-weight:600';$('studentSummary').before(n)}return n};
@@ -52,9 +52,11 @@ async function saveProgressSection(section){
  if(busy||!student)return;clearError();const date=$('entryDate').value,id=$('entryId').value;
  if(!date||date>today()){showError('Please choose a valid date that is not in the future.');return}
  const prefix=section==='lesson'?'':section==='recent'?'recent':'general',ids=rangeIds(prefix);
- const ss=Number($(ids.ss).value),sa=Number($(ids.sa).value),es=Number($(ids.es).value),ea=Number($(ids.ea).value);
+ let ss=Number($(ids.ss).value),sa=Number($(ids.sa).value),es=Number($(ids.es).value),ea=Number($(ids.ea).value);
  if(!ss||!sa||!es||!ea){showError('Please select the Surah and Ayah range for '+(section==='lesson'?'New Lesson':section==='recent'?'Recent Revision':'General Revision')+'.');return}
  if(!validSurahAyahSection(section))return;
+ // Accept reverse entry (e.g. An-Nas → Al-Falaq), then store the range in canonical Quran order.
+ if(ss>es||(ss===es&&sa>ea)){[ss,es]=[es,ss];[sa,ea]=[ea,sa]}
  const pages=Number($(section==='lesson'?'lessonPages':section==='recent'?'recentPages':'generalPages').value);
  const payload={entry_date:date+'T00:00:00'};if(section==='general')payload.remarks=$('remarks').value.trim()||null;
  if(section==='lesson'){payload.start_surah=ss;payload.start_ayah=sa;payload.end_surah=es;payload.end_ayah=ea;payload.pages=String(pages);payload.new_lesson=null}
