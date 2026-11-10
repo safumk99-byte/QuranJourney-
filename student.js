@@ -55,8 +55,6 @@ async function saveProgressSection(section){
  let ss=Number($(ids.ss).value),sa=Number($(ids.sa).value),es=Number($(ids.es).value),ea=Number($(ids.ea).value);
  if(!ss||!sa||!es||!ea){showError('Please select the Surah and Ayah range for '+(section==='lesson'?'New Lesson':section==='recent'?'Recent Revision':'General Revision')+'.');return}
  if(!validSurahAyahSection(section))return;
- // Accept reverse Quran order, then store canonical ascending endpoints.
- if(ss>es||(ss===es&&sa>ea)){[ss,es]=[es,ss];[sa,ea]=[ea,sa]}
  const pages=Number($(section==='lesson'?'lessonPages':section==='recent'?'recentPages':'generalPages').value);
  const payload={entry_date:date+'T00:00:00'};if(section==='general')payload.remarks=$('remarks').value.trim()||null;
  if(section==='lesson'){payload.start_surah=ss;payload.start_ayah=sa;payload.end_surah=es;payload.end_ayah=ea;payload.pages=String(pages);payload.new_lesson=null}

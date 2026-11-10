@@ -942,9 +942,9 @@ def _lesson_juz_page_contributions(start_surah: int | None, start_ayah: int | No
         return {}
     start_ord = _ayah_ordinal(int(start_surah), int(start_ayah))
     end_ord = _ayah_ordinal(int(end_surah), int(end_ayah))
-    if end_ord < start_ord:
-        return {}
-    return {"start": start_ord, "end": end_ord}
+    # Preserve the teacher's entered direction in the record, but calculate
+    # coverage over the inclusive Quran-order interval in either direction.
+    return {"start": min(start_ord, end_ord), "end": max(start_ord, end_ord)}
 
 def _juz_page_capacity(juz_no: int) -> float:
     interval = next(((start, end) for number, start, end in _QURAN_JUZ_INTERVALS if number == juz_no), None)
@@ -1972,8 +1972,6 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
                 validate_quran_range(*supplied)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            if supplied[0:2] > supplied[2:4]:
-                values[keys[0]], values[keys[1]], values[keys[2]], values[keys[3]] = supplied[2], supplied[3], supplied[0], supplied[1]
     for key, value in values.items():
         if key == "entry_date":
             if value is None:
@@ -2017,9 +2015,6 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
                 validate_quran_range(*supplied)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            if supplied[0:2] > supplied[2:4]:
-                for key, value in zip(keys, (supplied[2], supplied[3], supplied[0], supplied[1])):
-                    setattr(data, key, value)
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     _set_reading_juz_contribution(row)
@@ -2332,10 +2327,11 @@ def generate_exam(student_id: int, data: ExamGenerateInput, user: User = Depends
             for lesson in lessons:
                 first = (lesson.start_surah, lesson.start_ayah)
                 last = (lesson.end_surah, lesson.end_ayah)
-                for surah_no in range(lesson.start_surah, lesson.end_surah + 1):
+                lower, upper = sorted((first, last))
+                for surah_no in range(lower[0], upper[0] + 1):
                     for ref in _surah_ayah_refs(surah_no):
                         key = (ref["surah"], ref["ayah"])
-                        if first <= key <= last:
+                        if lower <= key <= upper:
                             refs_by_key[key] = (ref, f"New Lesson {lesson.entry_date.isoformat()}")
             if data.monthly_source == "new_lesson" and not refs_by_key:
                 raise HTTPException(status_code=400, detail="No New Lesson ranges were recorded for this student in the selected month. Revision entries are not used.")
