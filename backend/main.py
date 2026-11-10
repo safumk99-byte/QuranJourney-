@@ -548,9 +548,6 @@ def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_
         raise ValueError("Surah number must be between 1 and 114")
     if start_ayah < 1 or end_ayah < 1 or start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
         raise ValueError("Ayah number exceeds the selected Surah's length")
-    # Reject a backwards range; start must precede or equal end in Quran order.
-    if (start_surah, start_ayah) > (end_surah, end_ayah):
-        raise ValueError("End Surah/Ayah must be after or equal to Start Surah/Ayah")
 
 class ReadingInput(BaseModel):
     entry_date: datetime
@@ -1975,6 +1972,8 @@ def update_reading(student_id: int, entry_id: int, data: ReadingUpdateInput, use
                 validate_quran_range(*supplied)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            if supplied[0:2] > supplied[2:4]:
+                values[keys[0]], values[keys[1]], values[keys[2]], values[keys[3]] = supplied[2], supplied[3], supplied[0], supplied[1]
     for key, value in values.items():
         if key == "entry_date":
             if value is None:
@@ -2018,6 +2017,9 @@ def add_reading(student_id: int, data: ReadingInput, user: User = Depends(requir
                 validate_quran_range(*supplied)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            if supplied[0:2] > supplied[2:4]:
+                for key, value in zip(keys, (supplied[2], supplied[3], supplied[0], supplied[1])):
+                    setattr(data, key, value)
     row = ReadingEntry(student_id=student_id, entry_date=data.entry_date.date(), start_surah=data.start_surah, start_ayah=data.start_ayah, end_surah=data.end_surah, end_ayah=data.end_ayah, recent_start_surah=data.recent_start_surah, recent_start_ayah=data.recent_start_ayah, recent_end_surah=data.recent_end_surah, recent_end_ayah=data.recent_end_ayah, general_start_surah=data.general_start_surah, general_start_ayah=data.general_start_ayah, general_end_surah=data.general_end_surah, general_end_ayah=data.general_end_ayah, new_lesson=data.new_lesson, pages=data.pages, recent_revision=data.recent_revision, recent_pages=data.recent_pages, general_revision=data.general_revision, general_pages=data.general_pages, remarks=data.remarks)
     adjust_completed_pages(db, student_id, reading_page_count(data.pages))
     _set_reading_juz_contribution(row)
