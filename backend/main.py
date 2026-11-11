@@ -1930,7 +1930,7 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
                 "carry_in": carry_in,
                 "target": total_target,
                 "completed": round(completed, 2),
-                "remaining": round(max(0.0, period_base + carry_in - completed), 2),
+                "remaining": round(remaining, 2),
                 "working_days": elapsed_days,
                 "total_working_days": total_days,
                 "no_class_days": closed_in_target_window,
