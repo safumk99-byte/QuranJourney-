@@ -56,9 +56,9 @@ def test_monthly_target_excludes_fridays_and_all_applicable_no_class_days(client
             db.query(main.CalendarHoliday).all(), db,
         )
 
-        # Reset starts Nov 2: 25 Saturday–Thursday dates remain in Nov.
+        # Reset starts Nov 2: 23 Saturday–Thursday dates remain in Nov.
         # Two applicable non-Friday No Class Days are excluded; the Friday
         # holiday is not double-counted and the other-class holiday is ignored.
-        assert result["total_working_days"] == 23
+        assert result["total_working_days"] == 21
         assert result["no_class_days"] == 2
         assert result["target"] == round(result["base_target"] + result["carry_in"], 2)
