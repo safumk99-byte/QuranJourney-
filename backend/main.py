@@ -962,64 +962,91 @@ def _set_reading_juz_contribution(row: ReadingEntry) -> None:
     )
     row.juz_progress_data = json.dumps(values, separators=(",", ":")) if values else None
 
+# Student-facing Progress Juz order:
+# 1..5 = actual Juz 30..26 (ending at Surah Al-Ahqaf),
+# 6..30 = actual Juz 1..25 (starting at Surah Al-Baqarah).
+_PROGRESS_JUZ_ORDER = [30, 29, 28, 27, 26, *range(1, 26)]
+
+def _actual_juz_for_progress(progress_juz: int) -> int:
+    if not 1 <= int(progress_juz) <= len(_PROGRESS_JUZ_ORDER):
+        raise ValueError("Progress Juz must be between 1 and 30")
+    return _PROGRESS_JUZ_ORDER[int(progress_juz) - 1]
+
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild automatic Juz progress from unique ayah coverage, preserving the pre-tracking baseline."""
+    """Rebuild sequential study progress from unique New Lesson ayah coverage."""
     student = db.get(Student, student_id)
     if student is None:
         return
     if student.juz_progress_base_juz is None:
         student.juz_progress_base_juz = int(student.current_juz or 1)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
+
+    # New Lesson coordinates are stored in the primary range columns. Revision
+    # ranges use their own columns and therefore never enter this calculation.
+    # Rebuild from coordinates rather than relying only on juz_progress_data so
+    # older New Lesson rows created before tracking was introduced are included.
     intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
-        ReadingEntry.juz_progress_data.is_not(None)
+        ReadingEntry.start_surah.is_not(None),
+        ReadingEntry.start_ayah.is_not(None),
+        ReadingEntry.end_surah.is_not(None),
+        ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
     for entry in rows:
-        try:
-            contribution = json.loads(entry.juz_progress_data or "{}")
-            start, end = int(contribution["start"]), int(contribution["end"])
-        except (TypeError, ValueError, KeyError):
+        if reading_page_count(entry.pages) <= 0:
             continue
-        if 0 <= start <= end < sum(SURAH_AYAH_COUNTS):
-            intervals.append((start, end))
-    # Merge overlapping or repeated lesson ranges before counting any page fraction.
+        try:
+            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+        except (TypeError, ValueError, IndexError):
+            continue
+        if 0 <= start <= sum(SURAH_AYAH_COUNTS) - 1 and 0 <= end <= sum(SURAH_AYAH_COUNTS) - 1:
+            intervals.append((min(start, end), max(start, end)))
+
+    # Merge overlapping/repeated ranges so duplicate Ayahs are never counted twice.
     merged: list[list[int]] = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1] + 1:
             merged[-1][1] = max(merged[-1][1], end)
         else:
             merged.append([start, end])
+
     by_juz: dict[int, float] = {}
     for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
         page_length = page_end - page_start + 1
-        for juz_no, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
+        for actual_juz, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
             left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
             if left_bound > right_bound:
                 continue
-            covered = 0
-            for start, end in merged:
-                left, right = max(start, left_bound), min(end, right_bound)
-                if left <= right:
-                    covered += right - left + 1
+            covered = sum(
+                max(0, min(end, right_bound) - max(start, left_bound) + 1)
+                for start, end in merged
+            )
             if covered:
-                by_juz[juz_no] = by_juz.get(juz_no, 0.0) + covered / page_length
+                by_juz[actual_juz] = by_juz.get(actual_juz, 0.0) + covered / page_length
+
     previous_current = int(student.current_juz or 1)
     current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    while current < 30:
-        available = pending + by_juz.get(current + 1, 0.0)
-        capacity = _juz_page_capacity(current + 1)
+    while current < len(_PROGRESS_JUZ_ORDER):
+        next_actual_juz = _actual_juz_for_progress(current + 1)
+        available = pending + by_juz.get(next_actual_juz, 0.0)
+        capacity = _juz_page_capacity(next_actual_juz)
         if capacity <= 0 or available + 1e-6 < capacity:
             pending = available
             break
         pending = max(0.0, available - capacity)
         current += 1
+
     student.current_juz = current
     student.next_juz_pages = round(pending, 2)
     if current > previous_current:
-        notify_student_parents(db, student.id, f"current-juz:{current}", "New Juz reached",
-                               f"{student.name} has reached Juz {current}.", "juz")
+        actual_juz = _actual_juz_for_progress(current)
+        notify_student_parents(
+            db, student.id, f"current-juz:{current}", "New Progress Juz reached",
+            f"{student.name} has reached Progress Juz {current} (Quran Juz {actual_juz}).", "juz"
+        )
 
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
