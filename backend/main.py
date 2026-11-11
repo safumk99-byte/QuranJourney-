@@ -81,7 +81,7 @@ class Student(Base):
     class_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     total_pages: Mapped[int] = mapped_column(Integer, default=604)
     completed_pages: Mapped[float] = mapped_column(Float, default=0.0)
-    current_juz: Mapped[int] = mapped_column(Integer, default=1)
+    current_juz: Mapped[int] = mapped_column(Integer, default=30)
     next_juz_pages: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     juz_progress_base_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     juz_progress_base_pages: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -463,7 +463,7 @@ class StudentInput(BaseModel):
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int = Field(default=604, ge=1, le=2000)
     completed_pages: float = Field(default=0, ge=0, le=2000)
-    current_juz: int = Field(default=1, ge=1, le=30)
+    current_juz: int = Field(default=30, ge=1, le=30)
     next_juz_pages: float = Field(default=0, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = Field(default=None, max_length=15_000_000)
@@ -472,6 +472,8 @@ class StudentInput(BaseModel):
     def validate_progress(self):
         if self.completed_pages > self.total_pages:
             raise ValueError("Completed pages cannot exceed total pages")
+        if self.current_juz == 26 and self.next_juz_pages != 0:
+            raise ValueError("Juz 26 is the final Juz in this curriculum; next Juz pages must be 0")
         return self
 
     @field_validator("student_code", "name")
@@ -548,6 +550,8 @@ def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_
         raise ValueError("Surah number must be between 1 and 114")
     if start_ayah < 1 or end_ayah < 1 or start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
         raise ValueError("Ayah number exceeds the selected Surah's length")
+    if _ayah_ordinal(start_surah, start_ayah) > _ayah_ordinal(end_surah, end_ayah):
+        raise ValueError("Reading range must follow Quran order from start to end")
 
 class ReadingInput(BaseModel):
     entry_date: datetime
@@ -962,64 +966,90 @@ def _set_reading_juz_contribution(row: ReadingEntry) -> None:
     )
     row.juz_progress_data = json.dumps(values, separators=(",", ":")) if values else None
 
+# This curriculum studies only Juz 30 down to Juz 26 (Surah Al-Ahqaf).
+# Values 1..5 were used by the earlier incorrect progress counter; normalize
+# those existing stored values to the real Quran Juz without changing DB rows.
+def _normalize_curriculum_juz(value: int | None) -> int:
+    number = int(value or 30)
+    if 1 <= number <= 5:
+        return 31 - number
+    return max(26, min(30, number))
+
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild automatic Juz progress from unique ayah coverage, preserving the pre-tracking baseline."""
+    """Rebuild sequential study progress from unique New Lesson ayah coverage."""
     student = db.get(Student, student_id)
     if student is None:
         return
     if student.juz_progress_base_juz is None:
-        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
+
+    # New Lesson coordinates are stored in the primary range columns. Revision
+    # ranges use their own columns and therefore never enter this calculation.
+    # Rebuild from coordinates rather than relying only on juz_progress_data so
+    # older New Lesson rows created before tracking was introduced are included.
     intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
-        ReadingEntry.juz_progress_data.is_not(None)
+        ReadingEntry.start_surah.is_not(None),
+        ReadingEntry.start_ayah.is_not(None),
+        ReadingEntry.end_surah.is_not(None),
+        ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
     for entry in rows:
-        try:
-            contribution = json.loads(entry.juz_progress_data or "{}")
-            start, end = int(contribution["start"]), int(contribution["end"])
-        except (TypeError, ValueError, KeyError):
+        if reading_page_count(entry.pages) <= 0:
             continue
-        if 0 <= start <= end < sum(SURAH_AYAH_COUNTS):
-            intervals.append((start, end))
-    # Merge overlapping or repeated lesson ranges before counting any page fraction.
+        try:
+            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+        except (TypeError, ValueError, IndexError):
+            continue
+        if 0 <= start <= sum(SURAH_AYAH_COUNTS) - 1 and 0 <= end <= sum(SURAH_AYAH_COUNTS) - 1:
+            intervals.append((min(start, end), max(start, end)))
+
+    # Merge overlapping/repeated ranges so duplicate Ayahs are never counted twice.
     merged: list[list[int]] = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1] + 1:
             merged[-1][1] = max(merged[-1][1], end)
         else:
             merged.append([start, end])
+
     by_juz: dict[int, float] = {}
     for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
         page_length = page_end - page_start + 1
-        for juz_no, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
+        for actual_juz, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
             left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
             if left_bound > right_bound:
                 continue
-            covered = 0
-            for start, end in merged:
-                left, right = max(start, left_bound), min(end, right_bound)
-                if left <= right:
-                    covered += right - left + 1
+            covered = sum(
+                max(0, min(end, right_bound) - max(start, left_bound) + 1)
+                for start, end in merged
+            )
             if covered:
-                by_juz[juz_no] = by_juz.get(juz_no, 0.0) + covered / page_length
-    previous_current = int(student.current_juz or 1)
-    current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
+                by_juz[actual_juz] = by_juz.get(actual_juz, 0.0) + covered / page_length
+
+    previous_current = _normalize_curriculum_juz(student.current_juz)
+    current = _normalize_curriculum_juz(student.juz_progress_base_juz)
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    while current < 30:
-        available = pending + by_juz.get(current + 1, 0.0)
-        capacity = _juz_page_capacity(current + 1)
+    # Move down from Juz 30 to Juz 26 only. Juz 26 is the final curriculum unit.
+    while current > 26:
+        next_actual_juz = current - 1
+        available = pending + by_juz.get(next_actual_juz, 0.0)
+        capacity = _juz_page_capacity(next_actual_juz)
         if capacity <= 0 or available + 1e-6 < capacity:
             pending = available
             break
         pending = max(0.0, available - capacity)
-        current += 1
+        current -= 1
+
     student.current_juz = current
-    student.next_juz_pages = round(pending, 2)
-    if current > previous_current:
-        notify_student_parents(db, student.id, f"current-juz:{current}", "New Juz reached",
-                               f"{student.name} has reached Juz {current}.", "juz")
+    student.next_juz_pages = 0.0 if current == 26 else round(pending, 2)
+    if current < previous_current:
+        notify_student_parents(
+            db, student.id, f"current-juz:{current}", "New Juz reached",
+            f"{student.name} has reached Juz {current}.", "juz"
+        )
 
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
@@ -1270,7 +1300,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         query = query.where(Student.id.in_(ids))
     student_rows = db.scalars(query.order_by(Student.name)).all()
     lesson_days = dict(db.execute(select(ReadingEntry.student_id, func.count(func.distinct(ReadingEntry.entry_date))).where(ReadingEntry.student_id.in_([s.id for s in student_rows] or [-1]), func.cast(ReadingEntry.pages, Float) > 0).group_by(ReadingEntry.student_id)).all())
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": s.current_juz, "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -1278,7 +1308,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
         raise HTTPException(status_code=409, detail="Student code already exists")
     student = Student(
         student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name,
-        total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=data.current_juz,
+        total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=_normalize_curriculum_juz(data.current_juz),
         next_juz_pages=data.next_juz_pages, journey_start_date=data.journey_start_date,
     )
     if data.photo_data:
@@ -1287,7 +1317,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
-            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz, "next_juz_pages": student.next_juz_pages or 0,
+            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": _normalize_curriculum_juz(student.current_juz), "next_juz_pages": student.next_juz_pages or 0,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
             "photo_data": student.photo_data, "cleanliness_points": student.cleanliness_points, "discipline_points": student.discipline_points, "worship_points": student.worship_points}
 
@@ -1297,6 +1327,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     values = data.model_dump(exclude_unset=True)
+    if "current_juz" in values:
+        values["current_juz"] = _normalize_curriculum_juz(values["current_juz"])
     old_photo_public_id = student.photo_public_id
     if "photo_data" in values:
         incoming_photo = values.pop("photo_data")
@@ -1305,24 +1337,26 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         elif not incoming_photo:
             student.photo_data, student.photo_public_id = None, None
     old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
-    old_juz = int(student.current_juz or 1)
+    old_juz = _normalize_curriculum_juz(student.current_juz)
     if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
         raise HTTPException(status_code=409, detail="Student code already exists")
     total_pages = values.get("total_pages", student.total_pages)
     completed_pages = values.get("completed_pages", student.completed_pages)
     if completed_pages > total_pages:
         raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
+    if values.get("current_juz", student.current_juz) == 26 and values.get("next_juz_pages", student.next_juz_pages or 0) != 0:
+        raise HTTPException(status_code=422, detail="Juz 26 is the final Juz in this curriculum; next Juz pages must be 0")
     for key, value in values.items():
         setattr(student, key, value)
     # A teacher's explicit Juz edit resets the automatic-tracking baseline.
     if "current_juz" in values or "next_juz_pages" in values:
-        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
     new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     if new_percent > old_percent:
         notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
                                f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
-    if int(student.current_juz or 1) > old_juz:
+    if int(student.current_juz or 30) < old_juz:
         notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
                                f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
@@ -1504,7 +1538,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                 "class_name": str(item.get("className") or "Unassigned class")[:100],
                 "total_pages": max(1, min(2000, int(item.get("totalPages") or 604))),
                 "completed_pages": max(0.0, min(max(1, min(2000, int(item.get("totalPages") or 604))), float(item.get("completedPages") or 0))),
-                "current_juz": max(1, min(30, int(item.get("currentJuz") or 1))),
+                "current_juz": _normalize_curriculum_juz(item.get("currentJuz") or 30),
                 "journey_start_date": datetime.fromisoformat(str(item.get("journeyStartDate") or item.get("createdAt") or datetime.now(timezone.utc).date()).replace("Z","+00:00")).date(),
                 "photo_data": data.photos.get(name) if name in data.photos else (row.photo_data if row is not None else None),
             }

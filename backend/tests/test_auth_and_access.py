@@ -83,7 +83,7 @@ def test_teacher_can_import_local_backup_without_duplicate_rows(client):
     assert students[0]["completed_pages"] == 45  # invalid-date row must not add 100 pages
     # Re-import must recalculate from the backup, not add the same pages twice.
     assert students[0]["completed_pages"] == 45
-    assert students[0]["current_juz"] == 3
+    assert students[0]["current_juz"] == 28
     assert students[0]["photo_data"] == "data:image/jpeg;base64,TEST"
     marks = client.get(f"/students/{students[0]['id']}/marks", headers=headers)
     assert marks.status_code == 200
@@ -284,7 +284,7 @@ def test_frontend_api_contract_teacher_to_parent_read_flow(client):
     )} == {
         "id": student_id, "student_code": "QJ-CONTRACT-001", "name": "Contract Test Child",
         "class_name": "Hifz A", "total_pages": 604, "completed_pages": 2,
-        "current_juz": 1, "journey_start_date": None, "photo_data": None
+        "current_juz": 30, "journey_start_date": None, "photo_data": None
     }
 
     reading = client.get(f"/students/{student_id}/reading", headers=parent_headers).json()
@@ -452,7 +452,7 @@ def test_teacher_can_update_student_and_parent_cannot(client):
     assert updated.json()["name"] == "After Update"
     assert updated.json()["class_name"] == "Hifz B"
     assert updated.json()["completed_pages"] == 25
-    assert updated.json()["current_juz"] == 2
+    assert updated.json()["current_juz"] == 29
 
     parent_created = client.post("/parents", headers=teacher_headers, json={
         "login_id": "parent_update_guard", "password": "Parent-Update-Guard-123!", "student_ids": [student_id]
