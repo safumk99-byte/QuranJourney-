@@ -58,12 +58,15 @@ def test_progress_order_switches_from_actual_juz_26_to_actual_juz_1(client):
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-002", current_juz=5)
 
-    # Al-Baqarah 2:1-141 is the complete 20-page actual Juz 1.
-    response = lesson(
-        client, headers, student_id,
-        start_surah=2, start_ayah=1, end_surah=2, end_ayah=141, pages="20",
-    )
-    assert response.status_code == 201, response.text
+    # Cover the complete actual Juz 1 in four valid New Lesson entries.
+    ranges = [(1, 37), (38, 76), (77, 116), (117, 141)]
+    for start_ayah, end_ayah in ranges:
+        response = lesson(
+            client, headers, student_id,
+            start_surah=2, start_ayah=start_ayah,
+            end_surah=2, end_ayah=end_ayah, pages="5",
+        )
+        assert response.status_code == 201, response.text
 
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 6
