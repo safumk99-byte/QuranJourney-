@@ -81,7 +81,7 @@ class Student(Base):
     class_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     total_pages: Mapped[int] = mapped_column(Integer, default=604)
     completed_pages: Mapped[float] = mapped_column(Float, default=0.0)
-    current_juz: Mapped[int] = mapped_column(Integer, default=1)
+    current_juz: Mapped[int] = mapped_column(Integer, default=30)
     next_juz_pages: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     juz_progress_base_juz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     juz_progress_base_pages: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -1538,7 +1538,7 @@ def import_legacy_localstorage(data: LegacyMigrationInput, user: User = Depends(
                 "class_name": str(item.get("className") or "Unassigned class")[:100],
                 "total_pages": max(1, min(2000, int(item.get("totalPages") or 604))),
                 "completed_pages": max(0.0, min(max(1, min(2000, int(item.get("totalPages") or 604))), float(item.get("completedPages") or 0))),
-                "current_juz": max(1, min(30, int(item.get("currentJuz") or 1))),
+                "current_juz": _normalize_curriculum_juz(item.get("currentJuz") or 30),
                 "journey_start_date": datetime.fromisoformat(str(item.get("journeyStartDate") or item.get("createdAt") or datetime.now(timezone.utc).date()).replace("Z","+00:00")).date(),
                 "photo_data": data.photos.get(name) if name in data.photos else (row.photo_data if row is not None else None),
             }
