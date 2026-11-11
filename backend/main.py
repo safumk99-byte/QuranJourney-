@@ -548,6 +548,8 @@ def validate_quran_range(start_surah: int, start_ayah: int, end_surah: int, end_
         raise ValueError("Surah number must be between 1 and 114")
     if start_ayah < 1 or end_ayah < 1 or start_ayah > SURAH_AYAH_COUNTS[start_surah - 1] or end_ayah > SURAH_AYAH_COUNTS[end_surah - 1]:
         raise ValueError("Ayah number exceeds the selected Surah's length")
+    if _ayah_ordinal(start_surah, start_ayah) > _ayah_ordinal(end_surah, end_ayah):
+        raise ValueError("Reading range must follow Quran order from start to end")
 
 class ReadingInput(BaseModel):
     entry_date: datetime
