@@ -902,10 +902,10 @@ def reading_page_count(value: str | None) -> float:
         number = float(value.strip())
         if number < 0 or number == float("inf") or number != number:
             return 0.0
-        doubled = number * 2
-        if abs(doubled - round(doubled)) > 1e-9:
+        quartered = number * 4
+        if abs(quartered - round(quartered)) > 1e-9:
             return 0.0
-        return round(number, 1)
+        return round(number, 2)
     except (ValueError, TypeError):
         return 0.0
 
