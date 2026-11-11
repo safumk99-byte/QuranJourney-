@@ -463,7 +463,7 @@ class StudentInput(BaseModel):
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int = Field(default=604, ge=1, le=2000)
     completed_pages: float = Field(default=0, ge=0, le=2000)
-    current_juz: int = Field(default=1, ge=1, le=30)
+    current_juz: int = Field(default=30, ge=26, le=30)
     next_juz_pages: float = Field(default=0, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = Field(default=None, max_length=15_000_000)
@@ -503,7 +503,7 @@ class StudentUpdateInput(BaseModel):
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int | None = Field(default=None, ge=1, le=2000)
     completed_pages: float | None = Field(default=None, ge=0, le=2000)
-    current_juz: int | None = Field(default=None, ge=1, le=30)
+    current_juz: int | None = Field(default=None, ge=26, le=30)
     next_juz_pages: float | None = Field(default=None, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = None
@@ -964,15 +964,14 @@ def _set_reading_juz_contribution(row: ReadingEntry) -> None:
     )
     row.juz_progress_data = json.dumps(values, separators=(",", ":")) if values else None
 
-# Student-facing Progress Juz order:
-# 1..5 = actual Juz 30..26 (ending at Surah Al-Ahqaf),
-# 6..30 = actual Juz 1..25 (starting at Surah Al-Baqarah).
-_PROGRESS_JUZ_ORDER = [30, 29, 28, 27, 26, *range(1, 26)]
-
-def _actual_juz_for_progress(progress_juz: int) -> int:
-    if not 1 <= int(progress_juz) <= len(_PROGRESS_JUZ_ORDER):
-        raise ValueError("Progress Juz must be between 1 and 30")
-    return _PROGRESS_JUZ_ORDER[int(progress_juz) - 1]
+# This curriculum studies only Juz 30 down to Juz 26 (Surah Al-Ahqaf).
+# Values 1..5 were used by the earlier incorrect progress counter; normalize
+# those existing stored values to the real Quran Juz without changing DB rows.
+def _normalize_curriculum_juz(value: int | None) -> int:
+    number = int(value or 30)
+    if 1 <= number <= 5:
+        return 31 - number
+    return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     """Rebuild sequential study progress from unique New Lesson ayah coverage."""
@@ -980,7 +979,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     if student is None:
         return
     if student.juz_progress_base_juz is None:
-        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
 
     # New Lesson coordinates are stored in the primary range columns. Revision
@@ -1028,26 +1027,26 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
             if covered:
                 by_juz[actual_juz] = by_juz.get(actual_juz, 0.0) + covered / page_length
 
-    previous_current = int(student.current_juz or 1)
-    current = max(1, min(30, int(student.juz_progress_base_juz or 1)))
+    previous_current = _normalize_curriculum_juz(student.current_juz)
+    current = _normalize_curriculum_juz(student.juz_progress_base_juz)
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    while current < len(_PROGRESS_JUZ_ORDER):
-        next_actual_juz = _actual_juz_for_progress(current + 1)
+    # Move down from Juz 30 to Juz 26 only. Juz 26 is the final curriculum unit.
+    while current > 26:
+        next_actual_juz = current - 1
         available = pending + by_juz.get(next_actual_juz, 0.0)
         capacity = _juz_page_capacity(next_actual_juz)
         if capacity <= 0 or available + 1e-6 < capacity:
             pending = available
             break
         pending = max(0.0, available - capacity)
-        current += 1
+        current -= 1
 
     student.current_juz = current
-    student.next_juz_pages = round(pending, 2)
-    if current > previous_current:
-        actual_juz = _actual_juz_for_progress(current)
+    student.next_juz_pages = 0.0 if current == 26 else round(pending, 2)
+    if current < previous_current:
         notify_student_parents(
-            db, student.id, f"current-juz:{current}", "New Progress Juz reached",
-            f"{student.name} has reached Progress Juz {current} (Quran Juz {actual_juz}).", "juz"
+            db, student.id, f"current-juz:{current}", "New Juz reached",
+            f"{student.name} has reached Juz {current}.", "juz"
         )
 
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
@@ -1334,7 +1333,7 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         elif not incoming_photo:
             student.photo_data, student.photo_public_id = None, None
     old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
-    old_juz = int(student.current_juz or 1)
+    old_juz = _normalize_curriculum_juz(student.current_juz)
     if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
         raise HTTPException(status_code=409, detail="Student code already exists")
     total_pages = values.get("total_pages", student.total_pages)
@@ -1345,13 +1344,13 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
         setattr(student, key, value)
     # A teacher's explicit Juz edit resets the automatic-tracking baseline.
     if "current_juz" in values or "next_juz_pages" in values:
-        student.juz_progress_base_juz = int(student.current_juz or 1)
+        student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
     new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
     if new_percent > old_percent:
         notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
                                f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
-    if int(student.current_juz or 1) > old_juz:
+    if int(student.current_juz or 30) < old_juz:
         notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
                                f"{student.name} has reached Juz {student.current_juz}.", "juz")
     db.commit()
