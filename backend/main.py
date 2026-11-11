@@ -986,8 +986,9 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
 
     # New Lesson coordinates are stored in the primary range columns. Revision
     # ranges use their own columns and therefore never enter this calculation.
-    # Rebuild from coordinates rather than relying only on juz_progress_data so
-    # older New Lesson rows created before tracking was introduced are included.
+    # Do not require the legacy new_lesson text field: the current form stores
+    # the range and page count while intentionally leaving that field null.
+    # Rebuild from coordinates so older rows are included as well.
     intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
@@ -995,8 +996,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ReadingEntry.start_ayah.is_not(None),
         ReadingEntry.end_surah.is_not(None),
         ReadingEntry.end_ayah.is_not(None),
-        ReadingEntry.new_lesson.is_not(None),
-    ).where(func.trim(ReadingEntry.new_lesson) != "").order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
     for entry in rows:
         if reading_page_count(entry.pages) <= 0:
             continue
