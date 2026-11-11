@@ -147,3 +147,32 @@ def test_all_point_boards_reset_each_month_without_deleting_history(client, monk
     challenge_history = client.get(f"/students/{sid}/challenge/sessions", headers=headers)
     assert challenge_history.status_code == 200
     assert {row["date"] for row in challenge_history.json()} == {"2026-09-30", "2026-10-03"}
+
+
+
+def test_three_quarter_new_lesson_points_are_rounded_up_consistently(client, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "current_month_bounds", lambda reference=None: (date(2026, 11, 1), date(2026, 11, 30)))
+    headers = auth(login(client, "test_teacher", "Test-Teacher-Password-123!").json()["access_token"])
+    student = client.post("/students", headers=headers, json={
+        "student_code": "ROUND-075", "name": "Quarter Page Rounding Student", "class_name": "Class 1"
+    }).json()
+
+    created = client.post(f"/students/{student['id']}/reading", headers=headers, json={
+        "entry_date": "2026-11-11T12:00:00", "pages": "0.75",
+        "recent_pages": "0", "general_pages": "0"
+    })
+    assert created.status_code == 201, created.text
+
+    leaderboard = client.get("/points/leaderboard?year=2026&month=11", headers=headers)
+    assert leaderboard.status_code == 200
+    row = next(item for item in leaderboard.json() if item["student_id"] == student["id"])
+    assert row["new_lesson_points"] == 8
+    assert row["total_points"] == 8
+
+    discipline = client.get("/discipline/summary", headers=headers)
+    assert discipline.status_code == 200
+    summary = next(item for item in discipline.json() if item["student_id"] == student["id"])
+    assert summary["academic_points"] == 8
+    assert summary["final_points"] == 8
