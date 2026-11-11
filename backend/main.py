@@ -1845,16 +1845,17 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
     target_days = (target_date - today).days
     remaining_pages = max(0.0, float(student.total_pages or 0) - float(student.completed_pages or 0))
     required_daily = remaining_pages / target_days if remaining_pages > 0 and target_days > 0 else 0.0
-    # Saturday–Thursday contains six target days; Friday is outside the weekly cycle.
-    dashboard_base = required_daily * (6.0 if kind == "week" else 30.4375)
+    # Both weekly and monthly targets use the same six-day study calendar.
+    # Friday is excluded from every target period; class/global No Class Days
+    # are excluded separately below.
 
     start, end = _period_bounds(today, kind)
     calculation_start = max(start_date, TARGET_CARRY_RESET_DATE)
     if calculation_start > today or calculation_start > target_date:
         return {"period_start": start.isoformat(), "period_end": end.isoformat(),
-                "base_target": round(dashboard_base, 2), "carry_in": 0,
-                "target": round(dashboard_base, 2), "completed": 0,
-                "remaining": round(dashboard_base, 2), "working_days": 0,
+                "base_target": 0, "carry_in": 0,
+                "target": 0, "completed": 0,
+                "remaining": 0, "working_days": 0,
                 "total_working_days": 0, "status": "Not started"}
 
     rows = db.execute(
@@ -1893,11 +1894,18 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         # eligible dates from that effective start. Fridays are never in this range.
         effective_start = max(period_start, calculation_start)
         eligible_start = effective_start
-        eligible_days = max(0, (period_end - eligible_start).days + 1)
+        # Count only Saturday–Thursday dates. Apply No Class Days to both
+        # weekly and monthly periods, without double-counting Fridays.
         closed_in_target_window = sum(
-            1 for closed_day in closed_dates if eligible_start <= closed_day <= period_end
+            1 for closed_day in closed_dates
+            if eligible_start <= closed_day <= period_end and closed_day.weekday() != 4
         )
-        period_base = required_daily * max(0, eligible_days - closed_in_target_window)
+        eligible_days = sum(
+            1 for offset in range(max(0, (period_end - eligible_start).days + 1))
+            if (eligible_start + timedelta(days=offset)).weekday() != 4
+        )
+        working_target_days = max(0, eligible_days - closed_in_target_window)
+        period_base = required_daily * working_target_days
         effective_end = min(period_end, today)
         completed = sum(
             value for entry_day, value in pages_by_date.items()
@@ -1907,14 +1915,17 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         total_target = period_base + carry_in
         remaining = max(0.0, total_target - completed)
         if period_start == start:
-            elapsed_days = max(0, (effective_end - effective_start).days + 1) if effective_end >= effective_start else 0
-            elapsed_days -= sum(1 for closed_day in closed_dates if effective_start <= closed_day <= effective_end)
-            total_days = max(0, (period_end - effective_start).days + 1)
-            total_days -= sum(1 for closed_day in closed_dates if effective_start <= closed_day <= period_end)
+            elapsed_days = sum(
+                1 for offset in range(max(0, (effective_end - effective_start).days + 1))
+                if effective_end >= effective_start
+                and (effective_start + timedelta(days=offset)).weekday() != 4
+                and (effective_start + timedelta(days=offset)) not in closed_dates
+            )
+            total_days = working_target_days
             current = {
                 "period_start": start.isoformat(),
                 "period_end": end.isoformat(),
-                "base_target": round(dashboard_base, 2),
+                "base_target": round(period_base, 2),
                 "carry_in": round(carry_in, 2),
                 "target": round(period_base + carry_in, 2),
                 "completed": round(completed, 2),
@@ -1929,9 +1940,9 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
         cursor = next_cursor
     return current or {
         "period_start": start.isoformat(), "period_end": end.isoformat(),
-        "base_target": round(dashboard_base, 2), "carry_in": 0,
-        "target": round(dashboard_base, 2), "completed": 0,
-        "remaining": round(dashboard_base, 2), "working_days": 0,
+        "base_target": 0, "carry_in": 0,
+        "target": 0, "completed": 0,
+        "remaining": 0, "working_days": 0,
         "total_working_days": 0, "status": "Pending",
     }
 
