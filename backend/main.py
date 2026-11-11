@@ -1298,7 +1298,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         query = query.where(Student.id.in_(ids))
     student_rows = db.scalars(query.order_by(Student.name)).all()
     lesson_days = dict(db.execute(select(ReadingEntry.student_id, func.count(func.distinct(ReadingEntry.entry_date))).where(ReadingEntry.student_id.in_([s.id for s in student_rows] or [-1]), func.cast(ReadingEntry.pages, Float) > 0).group_by(ReadingEntry.student_id)).all())
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": s.current_juz, "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
@@ -1315,7 +1315,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
     db.commit()
     db.refresh(student)
     return {"id": student.id, "student_code": student.student_code, "name": student.name, "class_name": student.class_name,
-            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": student.current_juz, "next_juz_pages": student.next_juz_pages or 0,
+            "total_pages": student.total_pages, "completed_pages": student.completed_pages, "current_juz": _normalize_curriculum_juz(student.current_juz), "next_juz_pages": student.next_juz_pages or 0,
             "journey_start_date": student.journey_start_date.isoformat() if student.journey_start_date else None,
             "photo_data": student.photo_data, "cleanliness_points": student.cleanliness_points, "discipline_points": student.discipline_points, "worship_points": student.worship_points}
 
