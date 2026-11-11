@@ -472,6 +472,8 @@ class StudentInput(BaseModel):
     def validate_progress(self):
         if self.completed_pages > self.total_pages:
             raise ValueError("Completed pages cannot exceed total pages")
+        if self.current_juz == 26 and self.next_juz_pages != 0:
+            raise ValueError("Juz 26 is the final Juz in this curriculum; next Juz pages must be 0")
         return self
 
     @field_validator("student_code", "name")
@@ -1340,6 +1342,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     completed_pages = values.get("completed_pages", student.completed_pages)
     if completed_pages > total_pages:
         raise HTTPException(status_code=422, detail="Completed pages cannot exceed total pages")
+    if values.get("current_juz", student.current_juz) == 26 and values.get("next_juz_pages", student.next_juz_pages or 0) != 0:
+        raise HTTPException(status_code=422, detail="Juz 26 is the final Juz in this curriculum; next Juz pages must be 0")
     for key, value in values.items():
         setattr(student, key, value)
     # A teacher's explicit Juz edit resets the automatic-tracking baseline.
