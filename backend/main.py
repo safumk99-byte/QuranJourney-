@@ -1911,8 +1911,9 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
             value for entry_day, value in pages_by_date.items()
             if effective_start <= entry_day <= effective_end
         ) if effective_end >= effective_start else 0.0
-        carry_in = carry
-        total_target = period_base + carry_in
+        carry_in = round(carry, 2)
+        base_target = round(period_base, 2)
+        total_target = round(base_target + carry_in, 2)
         remaining = max(0.0, total_target - completed)
         if period_start == start:
             elapsed_days = sum(
@@ -1925,9 +1926,9 @@ def _target_period(student: Student, kind: str, today: date, holidays: list[Cale
             current = {
                 "period_start": start.isoformat(),
                 "period_end": end.isoformat(),
-                "base_target": round(period_base, 2),
-                "carry_in": round(carry_in, 2),
-                "target": round(period_base + carry_in, 2),
+                "base_target": base_target,
+                "carry_in": carry_in,
+                "target": total_target,
                 "completed": round(completed, 2),
                 "remaining": round(max(0.0, period_base + carry_in - completed), 2),
                 "working_days": elapsed_days,
