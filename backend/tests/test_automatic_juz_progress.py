@@ -7,7 +7,7 @@ def login(client):
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
-def create_student(client, headers, code="JUZ-001", current_juz=1):
+def create_student(client, headers, code="JUZ-001", current_juz=30):
     response = client.post("/students", headers=headers, json={
         "student_code": code,
         "name": "Automatic Juz Test",
@@ -45,7 +45,7 @@ def test_progress_juz_2_tracks_actual_juz_29_and_deduplicates_ayahs(client):
     first = lesson(client, headers, student_id)
     assert first.status_code == 201, first.text
     progress = get_student(client, headers, student_id)
-    assert progress["current_juz"] == 1
+    assert progress["current_juz"] == 30
     assert progress["next_juz_pages"] > 0
 
     second = lesson(client, headers, student_id)
@@ -54,23 +54,25 @@ def test_progress_juz_2_tracks_actual_juz_29_and_deduplicates_ayahs(client):
     assert duplicate_progress["next_juz_pages"] == progress["next_juz_pages"]
 
 
-def test_progress_order_switches_from_actual_juz_26_to_actual_juz_1(client):
+def test_juz_26_is_the_final_curriculum_unit(client):
     headers = login(client)
-    student_id = create_student(client, headers, "JUZ-002", current_juz=5)
-
-    # Cover the complete actual Juz 1 in four valid New Lesson entries.
-    ranges = [(1, 37), (38, 76), (77, 116), (117, 141)]
-    for start_ayah, end_ayah in ranges:
-        response = lesson(
-            client, headers, student_id,
-            start_surah=2, start_ayah=start_ayah,
-            end_surah=2, end_ayah=end_ayah, pages="5",
-        )
-        assert response.status_code == 201, response.text
-
+    student_id = create_student(client, headers, "JUZ-002", current_juz=26)
+    # Even a complete lesson in Juz 25 must not advance this curriculum.
+    response = lesson(
+        client, headers, student_id,
+        start_surah=44, start_ayah=1, end_surah=44, end_ayah=59, pages="5",
+    )
+    assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
-    assert progress["current_juz"] == 6
+    assert progress["current_juz"] == 26
     assert progress["next_juz_pages"] == 0.0
+
+
+def test_legacy_progress_values_normalize_to_real_juz_numbers():
+    from main import _normalize_curriculum_juz
+
+    assert [_normalize_curriculum_juz(i) for i in range(1, 6)] == [30, 29, 28, 27, 26]
+    assert _normalize_curriculum_juz(30) == 30
 
 
 def test_edit_and_delete_recalculate_progress_juz(client):
@@ -90,7 +92,7 @@ def test_edit_and_delete_recalculate_progress_juz(client):
     deleted = client.delete(f"/students/{student_id}/reading/{entry_id}", headers=headers)
     assert deleted.status_code == 204
     final = get_student(client, headers, student_id)
-    assert final["current_juz"] == 1
+    assert final["current_juz"] == 30
     assert final["next_juz_pages"] == 0.0
 
 
