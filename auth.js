@@ -40,7 +40,20 @@ const api=async(path,options={})=>{
    }else{clear();location.replace('./login.html')}
    if(response.status===401){clear();location.replace('./login.html')}
   }
-  if(!response.ok)throw new Error(data.detail||('Request failed ('+response.status+')'));
+  if(!response.ok){
+   const detail=data?.detail??data?.message;
+   let message='';
+   if(Array.isArray(detail)){
+    message=detail.map(item=>{
+     if(typeof item==='string')return item;
+     const where=Array.isArray(item?.loc)?item.loc.filter(x=>x!=='body').join(' → '):'';
+     const why=item?.msg||item?.message||JSON.stringify(item);
+     return (where?where+': ':'')+why;
+    }).join(' | ');
+   }else if(typeof detail==='string')message=detail;
+   else if(detail&&typeof detail==='object')message=detail.message||detail.msg||JSON.stringify(detail);
+   throw new Error(message||('Request failed ('+response.status+')'));
+  }
   return data;
  }catch(error){
   window.QuranJourneyToast?.show(error?.message||'Something went wrong. Please try again.','error');
