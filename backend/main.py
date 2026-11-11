@@ -577,7 +577,7 @@ class ReadingInput(BaseModel):
                     n = float(value)
                 except (TypeError, ValueError):
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
-                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                if n < 0 or n > maximum or abs(n * 4 - round(n * 4)) > 1e-9:
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
         for prefix in ("", "recent_", "general_"):
             keys = (f"{prefix}start_surah", f"{prefix}start_ayah", f"{prefix}end_surah", f"{prefix}end_ayah")
@@ -626,7 +626,7 @@ class ReadingUpdateInput(BaseModel):
                     n = float(value)
                 except (TypeError, ValueError):
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
-                if n < 0 or n > maximum or abs(n * 2 - round(n * 2)) > 1e-9:
+                if n < 0 or n > maximum or abs(n * 4 - round(n * 4)) > 1e-9:
                     raise ValueError("Lesson pages must be 0–5; revision pages must be 0–10, in half-page increments")
         return self
 
