@@ -112,12 +112,12 @@ def test_revision_only_entry_does_not_change_progress_juz(client):
     })
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
-    assert progress["current_juz"] == 1
+    assert progress["current_juz"] == 30
     assert progress["next_juz_pages"] == 0.0
 
 
-def test_progress_juz_mapping_includes_30_to_26_then_1_to_25():
-    from main import _actual_juz_for_progress
+def test_legacy_progress_values_normalize_to_real_juz_numbers():
+    from main import _normalize_curriculum_juz
 
-    assert [_actual_juz_for_progress(i) for i in range(1, 7)] == [30, 29, 28, 27, 26, 1]
-    assert _actual_juz_for_progress(30) == 25
+    assert [_normalize_curriculum_juz(i) for i in range(1, 6)] == [30, 29, 28, 27, 26]
+    assert _normalize_curriculum_juz(30) == 30
