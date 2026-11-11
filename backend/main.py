@@ -463,7 +463,7 @@ class StudentInput(BaseModel):
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int = Field(default=604, ge=1, le=2000)
     completed_pages: float = Field(default=0, ge=0, le=2000)
-    current_juz: int = Field(default=30, ge=26, le=30)
+    current_juz: int = Field(default=30, ge=1, le=30)
     next_juz_pages: float = Field(default=0, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = Field(default=None, max_length=15_000_000)
@@ -505,7 +505,7 @@ class StudentUpdateInput(BaseModel):
     class_name: str | None = Field(default=None, max_length=100)
     total_pages: int | None = Field(default=None, ge=1, le=2000)
     completed_pages: float | None = Field(default=None, ge=0, le=2000)
-    current_juz: int | None = Field(default=None, ge=26, le=30)
+    current_juz: int | None = Field(default=None, ge=1, le=30)
     next_juz_pages: float | None = Field(default=None, ge=0, le=21)
     journey_start_date: date | None = None
     photo_data: str | None = None
@@ -1308,7 +1308,7 @@ def create_student(data: StudentInput, user: User = Depends(require_teacher), db
         raise HTTPException(status_code=409, detail="Student code already exists")
     student = Student(
         student_code=data.student_code.strip(), name=data.name.strip(), class_name=data.class_name,
-        total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=data.current_juz,
+        total_pages=data.total_pages, completed_pages=data.completed_pages, current_juz=_normalize_curriculum_juz(data.current_juz),
         next_juz_pages=data.next_juz_pages, journey_start_date=data.journey_start_date,
     )
     if data.photo_data:
@@ -1327,6 +1327,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     values = data.model_dump(exclude_unset=True)
+    if "current_juz" in values:
+        values["current_juz"] = _normalize_curriculum_juz(values["current_juz"])
     old_photo_public_id = student.photo_public_id
     if "photo_data" in values:
         incoming_photo = values.pop("photo_data")
