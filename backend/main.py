@@ -995,7 +995,8 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ReadingEntry.start_ayah.is_not(None),
         ReadingEntry.end_surah.is_not(None),
         ReadingEntry.end_ayah.is_not(None),
-    ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+        ReadingEntry.new_lesson.is_not(None),
+    ).where(func.trim(ReadingEntry.new_lesson) != "").order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
     for entry in rows:
         if reading_page_count(entry.pages) <= 0:
             continue
