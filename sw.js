@@ -1,4 +1,4 @@
-const CACHE_NAME='quran-journey-v68';
+const CACHE_NAME='quran-journey-v69';
 const FILES=['./','./index.html','./style.css','./app.js','./photo.js','./manifest.json','./icon.svg','./report.html','./report.js','./students.html','./students.js','./attendance.html','./discipline.html','./discipline.js','./attendance.js','./student.html','./student.js','./challenge.html','./challenge.js','./parent.html','./parent.js','./notifications.html','./notifications.js','./exam.html','./exam.js','./quran.html','./quran.js','./mushaf-renderer.js','./data/mushaf-madani-1405-page-map.json','./data/quran-uthmani.json','./login.html','./nav.js','./theme.js','./config.js','./auth.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('quran-journey-')&&key!==CACHE_NAME&&!key.startsWith('quran-journey-mushaf-')).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
