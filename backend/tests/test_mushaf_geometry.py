@@ -1,4 +1,12 @@
-from scripts.build_mushaf_geometry import rectangle_union_area
+import importlib.util
+from pathlib import Path
+
+MODULE_PATH = Path(__file__).resolve().parents[2] / "scripts" / "build_mushaf_geometry.py"
+SPEC = importlib.util.spec_from_file_location("build_mushaf_geometry", MODULE_PATH)
+MODULE = importlib.util.module_from_spec(SPEC)
+assert SPEC and SPEC.loader
+SPEC.loader.exec_module(MODULE)
+rectangle_union_area = MODULE.rectangle_union_area
 
 
 def test_rectangle_union_area_counts_non_overlapping_ayah_segments():
