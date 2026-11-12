@@ -977,7 +977,7 @@ def _normalize_curriculum_juz(value: int | None) -> int:
     return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild sequential study progress from unique New Lesson ayah coverage."""
+    """Track the active Juz in Madani Mushaf order, studying Surahs backwards."""
     student = db.get(Student, student_id)
     if student is None:
         return
@@ -985,11 +985,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
 
-    # New Lesson coordinates are stored in the primary range columns. Revision
-    # ranges use their own columns and therefore never enter this calculation.
-    # Do not require the legacy new_lesson text field: the current form stores
-    # the range and page count while intentionally leaving that field null.
-    # Rebuild from coordinates so older rows are included as well.
     intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
@@ -1002,51 +997,75 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         if reading_page_count(entry.pages) <= 0:
             continue
         try:
-            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
-            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+            a = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            b = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
         except (TypeError, ValueError, IndexError):
             continue
-        if 0 <= start <= sum(SURAH_AYAH_COUNTS) - 1 and 0 <= end <= sum(SURAH_AYAH_COUNTS) - 1:
-            intervals.append((min(start, end), max(start, end)))
+        if 0 <= a <= sum(SURAH_AYAH_COUNTS)-1 and 0 <= b <= sum(SURAH_AYAH_COUNTS)-1:
+            intervals.append((min(a, b), max(a, b)))
 
-    # Merge overlapping/repeated ranges so duplicate Ayahs are never counted twice.
     merged: list[list[int]] = []
-    for start, end in sorted(intervals):
-        if merged and start <= merged[-1][1] + 1:
-            merged[-1][1] = max(merged[-1][1], end)
+    for left, right in sorted(intervals):
+        if merged and left <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], right)
         else:
-            merged.append([start, end])
+            merged.append([left, right])
 
-    by_juz: dict[int, float] = {}
-    for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
-        page_length = page_end - page_start + 1
-        for actual_juz, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
-            left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
-            if left_bound > right_bound:
-                continue
-            covered = sum(
-                max(0, min(end, right_bound) - max(start, left_bound) + 1)
-                for start, end in merged
-            )
-            if covered:
-                by_juz[actual_juz] = by_juz.get(actual_juz, 0.0) + covered / page_length
+    def is_covered(left: int, right: int) -> bool:
+        return any(a <= left and b >= right for a, b in merged)
+
+
+    def page_units(left: int, right: int) -> float:
+        total = 0.0
+        for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+            overlap = min(right, page_right) - max(left, page_left) + 1
+            if overlap > 0:
+                total += overlap / (page_right - page_left + 1)
+        return total
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
     current = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    # Move down from Juz 30 to Juz 26 only. Juz 26 is the final curriculum unit.
-    while current > 26:
-        next_actual_juz = current - 1
-        available = pending + by_juz.get(next_actual_juz, 0.0)
-        capacity = _juz_page_capacity(next_actual_juz)
-        if capacity <= 0 or available + 1e-6 < capacity:
-            pending = available
+    baseline_pages = max(0.0, float(student.juz_progress_base_pages or 0))
+    progress_pages = baseline_pages
+
+    while current >= 26:
+        juz_interval = next(((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == current), None)
+        if not juz_interval:
             break
-        pending = max(0.0, available - capacity)
+        juz_left, juz_right = juz_interval
+        complete = True
+        # Madani Mushaf Juz boundaries clipped to each Surah. The curriculum
+        # moves through Surahs in descending order; within the active Surah,
+        # count the recorded page coverage without requiring reverse Ayah order.
+        for surah in range(114, 0, -1):
+            surah_left = _ayah_ordinal(surah, 1)
+            surah_right = surah_left + SURAH_AYAH_COUNTS[surah - 1] - 1
+            left, right = max(juz_left, surah_left), min(juz_right, surah_right)
+            if left > right:
+                continue
+            if is_covered(left, right):
+                progress_pages += page_units(left, right)
+                continue
+            for covered_left, covered_right in merged:
+                overlap_left = max(left, covered_left)
+                overlap_right = min(right, covered_right)
+                if overlap_left <= overlap_right:
+                    progress_pages += page_units(overlap_left, overlap_right)
+            complete = False
+            break
+
+        if not complete:
+            break
+        if current == 26:
+            current = 26
+            progress_pages = 0.0
+            break
         current -= 1
+        # The next Juz has its own independent reverse-Surah sequence.
+        progress_pages = 0.0
 
     student.current_juz = current
-    student.next_juz_pages = 0.0 if current == 26 else round(pending, 2)
+    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
