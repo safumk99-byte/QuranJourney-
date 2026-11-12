@@ -28,7 +28,7 @@ def rectangle_union_area(rectangles: list[tuple[int, int, int, int]]) -> int:
     """Exact union area of axis-aligned integer rectangles."""
     if not rectangles:
         return 0
-    xs = sorted({x for rect in rectangles for x in (rect[0], rect[1])})
+    xs = sorted({x for rect in rectangles for x in (rect[0], rect[2])})
     area = 0
     for left, right in zip(xs, xs[1:]):
         if right <= left:
