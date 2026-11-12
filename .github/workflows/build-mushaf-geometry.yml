@@ -21,6 +21,8 @@ jobs:
           assert len(data["pages"]) == 103, len(data["pages"])
           assert data["pages"][0]["page"] == 502
           assert data["pages"][-1]["page"] == 604
+          assert data["pages"][0]["ayah_areas"][0]["surah"] == 45
+          assert all(p["page_area"] > 0 for p in data["pages"])
           print("Validated", len(data["pages"]), "pages")
           PY
       - uses: actions/upload-artifact@v4
