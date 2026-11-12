@@ -24,12 +24,6 @@ def fetch_json(url: str):
         return json.loads(response.read().decode("utf-8"))
 
 
-def ayah_ordinal(surah: int, ayah: int, counts: list[int]) -> int:
-    if not 1 <= surah <= len(counts) or not 1 <= ayah <= counts[surah - 1]:
-        raise ValueError(f"Invalid ayah coordinate: {surah}:{ayah}")
-    return sum(counts[:surah - 1]) + ayah
-
-
 def rectangle_union_area(rectangles: list[tuple[int, int, int, int]]) -> int:
     """Exact union area of axis-aligned integer rectangles."""
     if not rectangles:
@@ -84,11 +78,13 @@ def validate_page(page_number: int, rows: list[dict], expected_start: list[int])
 def build_dataset(output: Path, start_surah: int = 46, start_ayah: int = 1) -> dict:
     page_map_data = fetch_json(PAGE_MAP_URL)
     page_starts = page_map_data["pages"]
-    counts = page_map_data["surah_ayah_counts"]
-    target = ayah_ordinal(start_surah, start_ayah, counts)
+    # Page entries are [page_number, start_surah, start_ayah]. Select the
+    # page containing the curriculum start, which may begin before the exact
+    # starting ayah (e.g. Juz 26 starts at 46:1 on a page beginning at 45:33).
+    target = (start_surah, start_ayah)
     page_number = 1
-    for index, (page, surah, ayah) in enumerate(page_starts):
-        if ayah_ordinal(surah, ayah, counts) <= target:
+    for page, surah, ayah in page_starts:
+        if (surah, ayah) <= target:
             page_number = page
         else:
             break
@@ -99,18 +95,30 @@ def build_dataset(output: Path, start_surah: int = 46, start_ayah: int = 1) -> d
             continue
         rows = fetch_json(f"{COORDS_BASE}/{page}.json")
         validate_page(page, rows, [surah, ayah])
+        grouped: dict[tuple[int, int], list[tuple[int, int, int, int]]] = {}
+        all_boxes = []
+        ayah_boxes = []
+        for row in rows:
+            box = (row["min_x"], row["min_y"], row["max_x"], row["max_y"])
+            all_boxes.append(box)
+            grouped.setdefault((row["surah_number"], row["ayah_number"]), []).append(box)
+            ayah_boxes.append({
+                "surah": row["surah_number"],
+                "ayah": row["ayah_number"],
+                "line": row["line_number"],
+                "position": row["position"],
+                "box": list(box),
+            })
+        page_area = rectangle_union_area(all_boxes)
+        ayah_area = [
+            {"surah": surah, "ayah": ayah, "area": rectangle_union_area(boxes)}
+            for (surah, ayah), boxes in sorted(grouped.items())
+        ]
         pages.append({
             "page": page,
-            "ayah_boxes": [
-                {
-                    "surah": row["surah_number"],
-                    "ayah": row["ayah_number"],
-                    "line": row["line_number"],
-                    "position": row["position"],
-                    "box": [row["min_x"], row["min_y"], row["max_x"], row["max_y"]],
-                }
-                for row in rows
-            ],
+            "page_area": page_area,
+            "ayah_areas": ayah_area,
+            "ayah_boxes": ayah_boxes,
         })
 
     result = {
@@ -118,7 +126,7 @@ def build_dataset(output: Path, start_surah: int = 46, start_ayah: int = 1) -> d
         "mushaf": "Madani 1405 (King Fahd Complex coordinate source)",
         "source": SOURCE,
         "license": LICENSE,
-        "method": "Ayah bounding-box union area / total ayah bounding-box union area per page",
+        "method": "Sum of each covered ayah's bounding-box union area divided by page bounding-box union area",
         "accuracy_note": "Geometric estimate, not exact ink-area measurement.",
         "pages": pages,
     }
