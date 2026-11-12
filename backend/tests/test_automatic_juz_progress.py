@@ -54,6 +54,19 @@ def test_progress_tracks_active_juz_30_and_deduplicates_ayahs(client):
     assert duplicate_progress["next_juz_pages"] == progress["next_juz_pages"]
 
 
+def test_juz_26_final_juz_still_shows_studied_page_progress(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-026-PROGRESS", current_juz=26)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=50, start_ayah=1, end_surah=50, end_ayah=35, pages="0.5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 26
+    assert progress["next_juz_pages"] > 0
+
+
 def test_juz_26_is_the_final_curriculum_unit(client):
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-002", current_juz=26)
