@@ -1229,6 +1229,14 @@ def startup() -> None:
                     db.add(User(login_id=login_id, password_hash=password_hash.hash(password), role="teacher"))
                     db.commit()
 
+    # One-time-on-deploy full cohort rebuild: remove stale cached page totals
+    # for every student, not only the student whose lesson is next edited.
+    with SessionLocal() as db:
+        student_ids = db.scalars(select(Student.id).where(Student.is_active.is_(True))).all()
+        for student_id in student_ids:
+            _sync_student_juz_progress(db, student_id)
+        db.commit()
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "quran-journey-api"}
