@@ -2142,6 +2142,52 @@ def get_monthly_attendance_score(
     }
 
 
+
+
+@app.get("/attendance/reminders")
+def attendance_reminders(user: User = Depends(require_teacher), db: Session = Depends(get_db)):
+    """Return due class-period attendance reminders in India local time."""
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    today = now.date()
+    if today.weekday() == 4:  # Friday
+        return []
+    periods = [
+        {"period": 1, "label": "Period 1", "start": "06:15", "end": "08:15"},
+        {"period": 2, "label": "Period 2", "start": "09:15", "end": "11:30"},
+        {"period": 3, "label": "Period 3", "start": "14:00", "end": "16:00"},
+    ]
+    due = [p for p in periods if now.strftime("%H:%M") >= p["end"]]
+    if not due:
+        return []
+    students = db.scalars(select(Student).where(Student.is_active.is_(True)).order_by(Student.class_name, Student.name)).all()
+    by_class = {}
+    for student in students:
+        by_class.setdefault(student.class_name or "Unassigned class", []).append(student.id)
+    if not by_class:
+        return []
+    holiday_rows = db.scalars(select(CalendarHoliday).where(CalendarHoliday.holiday_date == today)).all()
+    global_holiday = any(not (h.class_name or "").strip() for h in holiday_rows)
+    holiday_classes = {str(h.class_name).strip() for h in holiday_rows if (h.class_name or "").strip()}
+    from urllib.parse import quote
+    results = []
+    for period in due:
+        saved_ids = set(db.scalars(select(Attendance.student_id).where(
+            Attendance.attendance_date == today, Attendance.period == period["period"]
+        )).all())
+        for class_name, student_ids in by_class.items():
+            if global_holiday or class_name in holiday_classes:
+                continue
+            missing = sum(student_id not in saved_ids for student_id in student_ids)
+            if missing:
+                results.append({
+                    "date": today.isoformat(), "class_name": class_name,
+                    "period": period["period"], "period_label": period["label"],
+                    "period_time": period["start"] + "–" + period["end"],
+                    "missing_count": missing, "student_count": len(student_ids),
+                    "url": "./attendance.html?date=" + today.isoformat() + "&class=" + quote(class_name) + "&period=" + str(period["period"]),
+                })
+    return results
+
 @app.get("/students/{student_id}/attendance")
 def get_attendance(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
