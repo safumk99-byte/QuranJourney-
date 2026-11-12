@@ -1,3 +1,19 @@
+def _expected_page_units_for_range(start_surah, start_ayah, end_surah, end_ayah, juz):
+    from main import _QURAN_PAGE_INTERVALS, _QURAN_JUZ_INTERVALS, _ayah_ordinal
+
+    left = _ayah_ordinal(start_surah, start_ayah)
+    right = _ayah_ordinal(end_surah, end_ayah)
+    juz_left, juz_right = next((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == juz)
+    total = 0.0
+    for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+        page_start, page_end = max(juz_left, page_left), min(juz_right, page_right)
+        if page_start > page_end:
+            continue
+        overlap = max(0, min(right, page_end) - max(left, page_start) + 1)
+        total += overlap / (page_end - page_start + 1)
+    return round(total, 2)
+
+
 def login(client):
     response = client.post("/auth/login", json={
         "login_id": "test_teacher",
@@ -225,11 +241,10 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == 16.5
+    assert progress["next_juz_pages"] == _expected_page_units_for_range(59, 1, 59, 24, 28)
 
 
-def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client):
-    from main import _juz_page_capacity
+def test_active_juz_progress_ignores_stale_lifetime_completed_pages(client):
 
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-CUMULATIVE", current_juz=29)
@@ -244,4 +259,4 @@ def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+    assert progress["next_juz_pages"] == _expected_page_units_for_range(59, 1, 59, 24, 28)
