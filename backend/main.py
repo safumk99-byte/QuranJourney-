@@ -1039,41 +1039,45 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         return total
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
-    current = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    progress_pages = 0.0
 
-    while current >= 26:
-        juz_interval = next(((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == current), None)
-        if not juz_interval:
-            break
-        juz_left, juz_right = juz_interval
-        complete = True
-        # Curriculum order is descending Surah number. Ayah order inside
-        # each Surah is not reversed.
-        for surah in range(114, 0, -1):
-            surah_left = _ayah_ordinal(surah, 1)
-            surah_right = surah_left + SURAH_AYAH_COUNTS[surah - 1] - 1
-            left, right = max(juz_left, surah_left), min(juz_right, surah_right)
-            if left > right:
-                continue
-            if is_covered(left, right):
-                continue
-            complete = False
-            break
+    # The latest New Lesson endpoint is the authoritative active position.
+    # Legacy base_juz/base_pages are stale snapshots and must not pin a
+    # student to an earlier Juz after they have moved into the next Surah.
+    latest_lesson = next((
+        row for row in reversed(rows)
+        if reading_page_count(row.pages) > 0
+        and row.end_surah is not None and row.end_ayah is not None
+    ), None)
 
-        if not complete:
-            break
-        if current == 26:
-            current = 26
-            progress_pages = 0.0
-            break
-        current -= 1
-        progress_pages = 0.0
+    if latest_lesson is not None:
+        try:
+            latest_ordinal = _ayah_ordinal(int(latest_lesson.end_surah), int(latest_lesson.end_ayah))
+            current = next(
+                (number for number, left, right in _QURAN_JUZ_INTERVALS
+                 if left <= latest_ordinal <= right),
+                _normalize_curriculum_juz(student.current_juz),
+            )
+        except (TypeError, ValueError, IndexError):
+            current = _normalize_curriculum_juz(student.current_juz)
+    else:
+        current = _normalize_curriculum_juz(student.current_juz)
+
+    # completed_pages is the cumulative New Lesson page total. Subtract the
+    # actual Madani capacities of all earlier curriculum Juz (30 downward)
+    # to obtain progress inside the active Juz. This also preserves progress
+    # entered before Ayah-coordinate tracking was introduced.
+    completed_total = max(0.0, float(student.completed_pages or 0))
+    completed_before_active = sum(
+        _juz_page_capacity(number)
+        for number in range(30, current, -1)
+    )
+    active_capacity = _juz_page_capacity(current)
+    progress_pages = min(
+        active_capacity,
+        max(0.0, completed_total - completed_before_active),
+    )
 
     student.current_juz = current
-    if current > 26:
-        active_interval = next(((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current), None)
-        progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
     student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
     if current < previous_current:
         notify_student_parents(
