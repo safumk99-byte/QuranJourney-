@@ -193,3 +193,42 @@ def test_completed_juz_29_advances_to_juz_28_and_counts_madani_pages():
     # Official Madani page intervals yield 16.75 page-equivalents for
     # Surahs 66 through 59; Al-Mujadilah (58) remains as the next lesson.
     assert expected_pages == 16.75
+
+
+def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-LATEST-59", current_juz=29)
+
+    # Simulate the legacy cumulative page total retained from older records.
+    updated = client.patch(f"/students/{student_id}", headers=headers, json={
+        "completed_pages": 59.0,
+    })
+    assert updated.status_code == 200, updated.text
+
+    response = lesson(
+        client, headers, student_id,
+        start_surah=59, start_ayah=1, end_surah=59, end_ayah=24, pages="0.5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 28
+    assert progress["next_juz_pages"] == 16.5
+
+
+def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client):
+    from main import _juz_page_capacity
+
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-CUMULATIVE", current_juz=29)
+    updated = client.patch(f"/students/{student_id}", headers=headers, json={
+        "completed_pages": 59,
+    })
+    assert updated.status_code == 200, updated.text
+    response = lesson(
+        client, headers, student_id,
+        start_surah=59, start_ayah=1, end_surah=59, end_ayah=24, pages="0.5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 28
+    assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
