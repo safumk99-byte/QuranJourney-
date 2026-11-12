@@ -128,7 +128,7 @@ def test_active_juz_28_progress_is_counted_in_juz_28_not_27(client):
     student_id = create_student(client, headers, "JUZ-028", current_juz=28)
     response = lesson(
         client, headers, student_id,
-        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.46",
+        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.5",
     )
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
