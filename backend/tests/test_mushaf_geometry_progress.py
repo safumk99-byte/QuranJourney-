@@ -23,4 +23,4 @@ def test_progress_stops_at_first_missing_ayah():
 
 
 def test_overlapping_ranges_are_deduplicated():
-    assert calculate_juz_page_progress([(4, 5), (4, 5)], INTERVAL, COUNTS, GEOMETRY) == 2.0
+    assert calculate_juz_page_progress([(2, 5), (2, 5)], INTERVAL, COUNTS, GEOMETRY) == 2.0
