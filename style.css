@@ -803,3 +803,15 @@ img{max-width:100%}
 .directory-daily-item.done{color:#087a53}
 .directory-daily-item.not-done{color:#a0aaa4}
 .directory-daily-item.pending{color:#8b9690}
+
+/* Teacher dashboard attendance reminders */
+.qj-reminder-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(8,24,17,.62);backdrop-filter:blur(5px)}
+.qj-reminder-dialog{width:min(560px,100%);max-height:min(88vh,760px);overflow:auto;padding:26px;border:1px solid var(--line);border-radius:22px;background:var(--surface);color:var(--text);box-shadow:0 24px 80px #0004}
+.qj-reminder-icon{display:grid;place-items:center;width:48px;height:48px;margin-bottom:14px;border-radius:15px;background:var(--surface-2);color:var(--green);font-size:28px}
+.qj-reminder-dialog h2{margin:6px 0 8px;font-size:23px}.qj-reminder-intro{color:var(--muted);font-size:14px;line-height:1.5}
+.qj-reminder-list{display:grid;gap:10px;margin:18px 0}
+.qj-reminder-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2)}
+.qj-reminder-item strong,.qj-reminder-item small{display:block}.qj-reminder-item small{margin-top:5px;color:var(--muted);font-size:12px}
+.qj-reminder-go{flex-shrink:0;padding:9px 12px;border-radius:10px;background:var(--green);color:white;text-decoration:none;font-size:12px;font-weight:750}
+.qj-reminder-close{width:100%;min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+@media(max-width:520px){.qj-reminder-dialog{padding:20px}.qj-reminder-item{align-items:flex-start;flex-direction:column}.qj-reminder-go{width:100%;text-align:center}}
