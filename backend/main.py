@@ -977,7 +977,7 @@ def _normalize_curriculum_juz(value: int | None) -> int:
     return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Track the active Juz in Madani Mushaf order, studying Surahs backwards."""
+    """Track active-Juz New Lesson pages, deduplicating overlapping Ayah ranges."""
     student = db.get(Student, student_id)
     if student is None:
         return
@@ -985,7 +985,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
 
-    intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
         ReadingEntry.start_surah.is_not(None),
@@ -993,34 +992,69 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ReadingEntry.end_surah.is_not(None),
         ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+
+    # Each teacher-entered New Lesson page value is authoritative. Allocate
+    # that value across its inclusive Ayah range, but count only Ayahs not
+    # already recorded by an earlier lesson (so duplicate/overlapping ranges
+    # cannot inflate the student's page total).
+    covered: list[list[int]] = []
+    weighted_ranges: list[tuple[int, int, float]] = []
+
+    def uncovered_parts(left: int, right: int) -> list[tuple[int, int]]:
+        parts: list[tuple[int, int]] = []
+        cursor = left
+        for old_left, old_right in covered:
+            if old_right < cursor:
+                continue
+            if old_left > right:
+                break
+            if old_left > cursor:
+                parts.append((cursor, min(right, old_left - 1)))
+            cursor = max(cursor, old_right + 1)
+            if cursor > right:
+                break
+        if cursor <= right:
+            parts.append((cursor, right))
+        return parts
+
     for entry in rows:
-        if reading_page_count(entry.pages) <= 0:
+        lesson_pages = reading_page_count(entry.pages)
+        if lesson_pages <= 0:
             continue
         try:
             a = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
             b = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
         except (TypeError, ValueError, IndexError):
             continue
-        if 0 <= a <= sum(SURAH_AYAH_COUNTS)-1 and 0 <= b <= sum(SURAH_AYAH_COUNTS)-1:
-            intervals.append((min(a, b), max(a, b)))
-
-    merged: list[list[int]] = []
-    for left, right in sorted(intervals):
-        if merged and left <= merged[-1][1] + 1:
-            merged[-1][1] = max(merged[-1][1], right)
-        else:
-            merged.append([left, right])
+        if not (0 <= a <= sum(SURAH_AYAH_COUNTS)-1 and 0 <= b <= sum(SURAH_AYAH_COUNTS)-1):
+            continue
+        left, right = min(a, b), max(a, b)
+        total_ayahs = right - left + 1
+        for part_left, part_right in uncovered_parts(left, right):
+            weighted_ranges.append((
+                part_left, part_right,
+                float(lesson_pages) / total_ayahs,
+            ))
+        covered.append([left, right])
+        covered.sort()
+        merged: list[list[int]] = []
+        for old_left, old_right in covered:
+            if merged and old_left <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], old_right)
+            else:
+                merged.append([old_left, old_right])
+        covered = merged
 
     def is_covered(left: int, right: int) -> bool:
-        return any(a <= left and b >= right for a, b in merged)
+        return any(a <= left and b >= right for a, b in covered)
 
-
-    def page_units(left: int, right: int) -> float:
+    def recorded_pages(left: int, right: int) -> float:
         total = 0.0
-        for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
-            overlap = min(right, page_right) - max(left, page_left) + 1
-            if overlap > 0:
-                total += overlap / (page_right - page_left + 1)
+        for part_left, part_right, pages_per_ayah in weighted_ranges:
+            overlap_left = max(left, part_left)
+            overlap_right = min(right, part_right)
+            if overlap_left <= overlap_right:
+                total += (overlap_right - overlap_left + 1) * pages_per_ayah
         return total
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
@@ -1034,23 +1068,17 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
             break
         juz_left, juz_right = juz_interval
         complete = True
-        # Madani Mushaf Juz boundaries clipped to each Surah. The curriculum
-        # moves through Surahs in descending order; within the active Surah,
-        # count the recorded page coverage without requiring reverse Ayah order.
+        # Curriculum order is descending Surah number. Ayah order inside
+        # each Surah is not reversed.
         for surah in range(114, 0, -1):
             surah_left = _ayah_ordinal(surah, 1)
             surah_right = surah_left + SURAH_AYAH_COUNTS[surah - 1] - 1
             left, right = max(juz_left, surah_left), min(juz_right, surah_right)
             if left > right:
                 continue
+            progress_pages += recorded_pages(left, right)
             if is_covered(left, right):
-                progress_pages += page_units(left, right)
                 continue
-            for covered_left, covered_right in merged:
-                overlap_left = max(left, covered_left)
-                overlap_right = min(right, covered_right)
-                if overlap_left <= overlap_right:
-                    progress_pages += page_units(overlap_left, overlap_right)
             complete = False
             break
 
@@ -1061,7 +1089,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
             progress_pages = 0.0
             break
         current -= 1
-        # The next Juz has its own independent reverse-Surah sequence.
         progress_pages = 0.0
 
     student.current_juz = current
