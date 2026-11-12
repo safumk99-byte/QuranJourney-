@@ -18,7 +18,7 @@ def create_student(client, headers, code="JUZ-001", current_juz=30):
     return response.json()["id"]
 
 
-def lesson(client, headers, student_id, *, start_surah=66, start_ayah=1, end_surah=66, end_ayah=5, pages="1"):
+def lesson(client, headers, student_id, *, start_surah=78, start_ayah=1, end_surah=78, end_ayah=5, pages="1"):
     return client.post(f"/students/{student_id}/reading", headers=headers, json={
         "entry_date": "2026-11-01T12:00:00",
         "start_surah": start_surah,
@@ -121,3 +121,16 @@ def test_legacy_progress_values_normalize_to_real_juz_numbers():
 
     assert [_normalize_curriculum_juz(i) for i in range(1, 6)] == [30, 29, 28, 27, 26]
     assert _normalize_curriculum_juz(30) == 30
+
+
+def test_active_juz_28_progress_is_counted_in_juz_28_not_27(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-028", current_juz=28)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.46",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 28
+    assert progress["next_juz_pages"] > 0
