@@ -136,7 +136,7 @@ def test_active_juz_28_progress_is_counted_in_juz_28_not_27(client):
     assert progress["next_juz_pages"] > 0
 
 
-def test_active_juz_pages_use_teacher_entered_new_lesson_pages_not_mushaf_ayah_fraction(client):
+def test_active_juz_pages_use_madani_page_ayah_boundaries(client):
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-PAGES", current_juz=28)
     response = lesson(
@@ -146,7 +146,7 @@ def test_active_juz_pages_use_teacher_entered_new_lesson_pages_not_mushaf_ayah_f
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == 1.5
+    assert progress["next_juz_pages"] == 2.0
 
 
 def test_overlapping_new_lesson_ranges_do_not_double_count_pages(client):
@@ -164,7 +164,7 @@ def test_overlapping_new_lesson_ranges_do_not_double_count_pages(client):
     )
     assert second.status_code == 201, second.text
     after = get_student(client, headers, student_id)["next_juz_pages"]
-    assert after == before == 1.5
+    assert after == before == 2.0
 
 
 def test_completed_juz_29_advances_to_juz_28_and_counts_madani_pages():
@@ -190,6 +190,6 @@ def test_completed_juz_29_advances_to_juz_28_and_counts_madani_pages():
         amount = sum(max(0, min(right, b) - max(left, a) + 1) for a, b in covered)
         expected_pages += amount / total
 
-    # Juz 28's first eight curriculum Surahs (66 through 59) cover 16 full
-    # Madani pages; Al-Mujadilah (58) remains as the next lesson.
-    assert expected_pages == 16.0
+    # Official Madani page intervals yield 16.75 page-equivalents for
+    # Surahs 66 through 59; Al-Mujadilah (58) remains as the next lesson.
+    assert expected_pages == 16.75
