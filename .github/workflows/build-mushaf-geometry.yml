@@ -1,0 +1,29 @@
+name: Build Madani Mushaf Geometry
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-geometry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Juz 26-30 page geometry
+        run: python scripts/build_mushaf_geometry.py --output backend/mushaf_ayah_geometry.json
+      - name: Validate generated dataset
+        run: |
+          python - <<'PY'
+          import json
+          data = json.load(open("backend/mushaf_ayah_geometry.json", encoding="utf-8"))
+          assert len(data["pages"]) == 103, len(data["pages"])
+          assert data["pages"][0]["page"] == 502
+          assert data["pages"][-1]["page"] == 604
+          print("Validated", len(data["pages"]), "pages")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: madani-mushaf-geometry-juz-26-30
+          path: backend/mushaf_ayah_geometry.json
