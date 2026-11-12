@@ -109,11 +109,14 @@ def build_dataset(output: Path, start_surah: int = 46, start_ayah: int = 1) -> d
                 "position": row["position"],
                 "box": list(box),
             })
-        page_area = rectangle_union_area(all_boxes)
         ayah_area = [
             {"surah": surah, "ayah": ayah, "area": rectangle_union_area(boxes)}
             for (surah, ayah), boxes in sorted(grouped.items())
         ]
+        # Sum ayah-assigned areas, rather than unioning across different
+        # ayahs, so any tiny inter-ayah coordinate overlap is normalized and
+        # cannot cause the sum of per-ayah fractions to exceed one page.
+        page_area = sum(item["area"] for item in ayah_area)
         pages.append({
             "page": page,
             "page_area": page_area,
