@@ -1014,14 +1014,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     def is_covered(left: int, right: int) -> bool:
         return any(a <= left and b >= right for a, b in merged)
 
-    def contiguous_suffix_end(start_at: int, lower_bound: int) -> int:
-        """Return the lowest continuously covered ordinal ending at start_at."""
-        for a, b in reversed(merged):
-            if a <= start_at <= b:
-                return max(a, lower_bound)
-            if b < start_at:
-                break
-        return start_at + 1
 
     def page_units(left: int, right: int) -> float:
         total = 0.0
@@ -1041,10 +1033,10 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         if not juz_interval:
             break
         juz_left, juz_right = juz_interval
-        contiguous_right = juz_right
         complete = True
-        # Madani Mushaf Juz boundaries clipped to each Surah. Study the
-        # Surahs in descending order, completing the final Surah first.
+        # Madani Mushaf Juz boundaries clipped to each Surah. The curriculum
+        # moves through Surahs in descending order; within the active Surah,
+        # count the recorded page coverage without requiring reverse Ayah order.
         for surah in range(114, 0, -1):
             surah_left = _ayah_ordinal(surah, 1)
             surah_right = surah_left + SURAH_AYAH_COUNTS[surah - 1] - 1
@@ -1053,11 +1045,12 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
                 continue
             if is_covered(left, right):
                 progress_pages += page_units(left, right)
-                contiguous_right = left - 1
                 continue
-            suffix_left = contiguous_suffix_end(contiguous_right, left)
-            if suffix_left <= contiguous_right:
-                progress_pages += page_units(suffix_left, contiguous_right)
+            for covered_left, covered_right in merged:
+                overlap_left = max(left, covered_left)
+                overlap_right = min(right, covered_right)
+                if overlap_left <= overlap_right:
+                    progress_pages += page_units(overlap_left, overlap_right)
             complete = False
             break
 
