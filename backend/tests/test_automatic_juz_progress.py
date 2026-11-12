@@ -165,3 +165,31 @@ def test_overlapping_new_lesson_ranges_do_not_double_count_pages(client):
     assert second.status_code == 201, second.text
     after = get_student(client, headers, student_id)["next_juz_pages"]
     assert after == before == 1.5
+
+
+def test_completed_juz_29_advances_to_juz_28_and_counts_madani_pages():
+    from main import SURAH_AYAH_COUNTS, _QURAN_PAGE_INTERVALS, _QURAN_JUZ_INTERVALS, _ayah_ordinal
+
+    # Official curriculum sequence: complete Juz 29 (77 down to 67),
+    # then complete Juz 28 through Al-Hashr (66 down to 59).
+    covered = []
+    for surah in range(77, 66, -1):
+        covered.append((_ayah_ordinal(surah, 1),
+                        _ayah_ordinal(surah, SURAH_AYAH_COUNTS[surah - 1])))
+    for surah in range(66, 58, -1):
+        covered.append((_ayah_ordinal(surah, 1),
+                        _ayah_ordinal(surah, SURAH_AYAH_COUNTS[surah - 1])))
+
+    juz28 = next((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == 28)
+    expected_pages = 0.0
+    for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+        left, right = max(juz28[0], page_left), min(juz28[1], page_right)
+        if left > right:
+            continue
+        total = right - left + 1
+        amount = sum(max(0, min(right, b) - max(left, a) + 1) for a, b in covered)
+        expected_pages += amount / total
+
+    # Juz 28's first eight curriculum Surahs (66 through 59) cover 16 full
+    # Madani pages; Al-Mujadilah (58) remains as the next lesson.
+    assert expected_pages == 16.0
