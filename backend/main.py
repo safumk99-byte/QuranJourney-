@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pwdlib import PasswordHash
 from sqlalchemy import UniqueConstraint, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select, func, text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
+from mushaf_geometry import load_geometry, calculate_juz_page_progress
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
@@ -473,8 +474,6 @@ class StudentInput(BaseModel):
     def validate_progress(self):
         if self.completed_pages > self.total_pages:
             raise ValueError("Completed pages cannot exceed total pages")
-        if self.current_juz == 26 and self.next_juz_pages != 0:
-            raise ValueError("Juz 26 is the final Juz in this curriculum; next Juz pages must be 0")
         return self
 
     @field_validator("student_code", "name")
@@ -916,6 +915,7 @@ def reading_page_count(value: str | None) -> float:
 
 
 # Quran page/Juz metadata for the standard 604-page Madinah Mushaf.
+_MUSHAF_GEOMETRY = load_geometry()
 _QURAN_MAP_PATH = os.path.join(os.path.dirname(__file__), "quran_page_map.json")
 with open(_QURAN_MAP_PATH, "r", encoding="utf-8") as _map_file:
     _QURAN_MAP = json.load(_map_file)
@@ -977,14 +977,10 @@ def _normalize_curriculum_juz(value: int | None) -> int:
     return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Track active-Juz New Lesson pages, deduplicating overlapping Ayah ranges."""
+    """Calculate active-Juz progress from sequential New Lesson coverage and Mushaf geometry."""
     student = db.get(Student, student_id)
     if student is None:
         return
-    if student.juz_progress_base_juz is None:
-        student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
-        student.juz_progress_base_pages = float(student.next_juz_pages or 0)
-
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
         ReadingEntry.start_surah.is_not(None),
@@ -993,106 +989,52 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
 
-    # Build unique Ayah coverage from New Lesson ranges. Page totals are
-    # derived from the official Madani page intervals, never from the
-    # teacher-entered pages field (which is only an entry-level estimate).
-    covered: list[list[int]] = []
+    def is_new_lesson(entry: ReadingEntry) -> bool:
+        # New Lesson uses the primary range and pages field. Revision entries
+        # have separate ranges/fields and must not affect Juz progress.
+        return (
+            reading_page_count(entry.pages) > 0
+            and not (entry.recent_revision or "").strip()
+            and not (entry.general_revision or "").strip()
+            and entry.recent_start_surah is None
+            and entry.general_start_surah is None
+        )
 
-    for entry in rows:
-        if reading_page_count(entry.pages) <= 0:
-            continue
+    lessons = [entry for entry in rows if is_new_lesson(entry)]
+    covered_ranges: list[tuple[int, int]] = []
+    for entry in lessons:
         try:
-            a = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
-            b = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+            left = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            right = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
         except (TypeError, ValueError, IndexError):
             continue
-        if not (0 <= a <= sum(SURAH_AYAH_COUNTS)-1 and 0 <= b <= sum(SURAH_AYAH_COUNTS)-1):
-            continue
-        left, right = min(a, b), max(a, b)
-        covered.append([left, right])
-        covered.sort()
-        merged: list[list[int]] = []
-        for old_left, old_right in covered:
-            if merged and old_left <= merged[-1][1] + 1:
-                merged[-1][1] = max(merged[-1][1], old_right)
-            else:
-                merged.append([old_left, old_right])
-        covered = merged
-
-    def is_covered(left: int, right: int) -> bool:
-        return any(a <= left and b >= right for a, b in covered)
-
-    def covered_page_units(juz_left: int, juz_right: int) -> float:
-        total = 0.0
-        for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
-            left, right = max(juz_left, page_left), min(juz_right, page_right)
-            if left > right:
-                continue
-            page_size = page_right - page_left + 1
-            covered_ayahs = 0
-            for range_left, range_right in covered:
-                overlap_left = max(left, range_left)
-                overlap_right = min(right, range_right)
-                if overlap_left <= overlap_right:
-                    covered_ayahs += overlap_right - overlap_left + 1
-            total += covered_ayahs / page_size
-        return total
+        if 0 <= left < sum(SURAH_AYAH_COUNTS) and 0 <= right < sum(SURAH_AYAH_COUNTS):
+            covered_ranges.append((min(left, right), max(left, right)))
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
-
-    # The latest New Lesson endpoint is the authoritative active position.
-    # Legacy base_juz/base_pages are stale snapshots and must not pin a
-    # student to an earlier Juz after they have moved into the next Surah.
-    latest_lesson = next((
-        row for row in reversed(rows)
-        if reading_page_count(row.pages) > 0
-        and row.end_surah is not None and row.end_ayah is not None
-    ), None)
-
-    if latest_lesson is not None:
+    current = previous_current
+    if lessons:
+        latest = lessons[-1]
         try:
-            latest_ordinal = _ayah_ordinal(int(latest_lesson.end_surah), int(latest_lesson.end_ayah))
+            latest_ordinal = _ayah_ordinal(int(latest.end_surah), int(latest.end_ayah))
             current = next(
                 (number for number, left, right in _QURAN_JUZ_INTERVALS
                  if left <= latest_ordinal <= right),
-                _normalize_curriculum_juz(student.current_juz),
+                previous_current,
             )
         except (TypeError, ValueError, IndexError):
-            current = _normalize_curriculum_juz(student.current_juz)
-    else:
-        current = _normalize_curriculum_juz(student.current_juz)
+            pass
 
-    # completed_pages is the cumulative New Lesson page total. Subtract the
-    # actual Madani capacities of all earlier curriculum Juz (30 downward)
-    # to obtain progress inside the active Juz. This also preserves progress
-    # entered before Ayah-coordinate tracking was introduced.
-    base_juz = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    if base_juz > current:
-        # This student has crossed a Juz boundary since the legacy baseline.
-        # Their cumulative page total preserves older lessons that predate
-        # stored Ayah coordinates; subtract the actual capacities of prior
-        # curriculum Juz to isolate the active Juz.
-        completed_total = max(0.0, float(student.completed_pages or 0))
-        completed_before_active = sum(
-            _juz_page_capacity(number)
-            for number in range(30, current, -1)
-        )
-        active_capacity = _juz_page_capacity(current)
-        progress_pages = min(
-            active_capacity,
-            max(0.0, completed_total - completed_before_active),
-        )
-    else:
-        # Within the same Juz, use the deduplicated Ayah intervals and the
-        # Madani page map so repeated lesson ranges do not add pages twice.
-        active_interval = next(
-            ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
-            None,
-        )
-        progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
+    active_interval = next(
+        ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
+        None,
+    )
+    progress_pages = calculate_juz_page_progress(
+        covered_ranges, active_interval, SURAH_AYAH_COUNTS, _MUSHAF_GEOMETRY
+    ) if active_interval else 0.0
 
     student.current_juz = current
-    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
+    student.next_juz_pages = round(progress_pages, 2)
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
