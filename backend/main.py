@@ -1092,7 +1092,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
 
     student.current_juz = current
-    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
+    student.next_juz_pages = round(progress_pages, 2) if current >= 26 else 0.0
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
