@@ -1059,8 +1059,12 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
     current = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    baseline_pages = max(0.0, float(student.juz_progress_base_pages or 0))
-    progress_pages = baseline_pages
+    # Page progress is reconstructed from New Lesson records on every sync.
+    # Do not carry forward next_juz_pages/base_pages from older algorithms:
+    # those cached values can preserve inaccurate fractions (for example 1.46).
+    baseline_pages = 0.0
+    student.juz_progress_base_pages = 0.0
+    progress_pages = 0.0
 
     while current >= 26:
         juz_interval = next(((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == current), None)
