@@ -134,3 +134,34 @@ def test_active_juz_28_progress_is_counted_in_juz_28_not_27(client):
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
     assert progress["next_juz_pages"] > 0
+
+
+def test_active_juz_pages_use_teacher_entered_new_lesson_pages_not_mushaf_ayah_fraction(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-PAGES", current_juz=28)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 28
+    assert progress["next_juz_pages"] == 1.5
+
+
+def test_overlapping_new_lesson_ranges_do_not_double_count_pages(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-OVERLAP", current_juz=28)
+    first = lesson(
+        client, headers, student_id,
+        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.5",
+    )
+    assert first.status_code == 201, first.text
+    before = get_student(client, headers, student_id)["next_juz_pages"]
+    second = lesson(
+        client, headers, student_id,
+        start_surah=66, start_ayah=1, end_surah=66, end_ayah=12, pages="1.5",
+    )
+    assert second.status_code == 201, second.text
+    after = get_student(client, headers, student_id)["next_juz_pages"]
+    assert after == before == 1.5
