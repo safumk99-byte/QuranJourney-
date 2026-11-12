@@ -1066,16 +1066,30 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     # actual Madani capacities of all earlier curriculum Juz (30 downward)
     # to obtain progress inside the active Juz. This also preserves progress
     # entered before Ayah-coordinate tracking was introduced.
-    completed_total = max(0.0, float(student.completed_pages or 0))
-    completed_before_active = sum(
-        _juz_page_capacity(number)
-        for number in range(30, current, -1)
-    )
-    active_capacity = _juz_page_capacity(current)
-    progress_pages = min(
-        active_capacity,
-        max(0.0, completed_total - completed_before_active),
-    )
+    base_juz = _normalize_curriculum_juz(student.juz_progress_base_juz)
+    if base_juz > current:
+        # This student has crossed a Juz boundary since the legacy baseline.
+        # Their cumulative page total preserves older lessons that predate
+        # stored Ayah coordinates; subtract the actual capacities of prior
+        # curriculum Juz to isolate the active Juz.
+        completed_total = max(0.0, float(student.completed_pages or 0))
+        completed_before_active = sum(
+            _juz_page_capacity(number)
+            for number in range(30, current, -1)
+        )
+        active_capacity = _juz_page_capacity(current)
+        progress_pages = min(
+            active_capacity,
+            max(0.0, completed_total - completed_before_active),
+        )
+    else:
+        # Within the same Juz, use the deduplicated Ayah intervals and the
+        # Madani page map so repeated lesson ranges do not add pages twice.
+        active_interval = next(
+            ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
+            None,
+        )
+        progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
 
     student.current_juz = current
     student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
