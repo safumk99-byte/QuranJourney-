@@ -201,7 +201,7 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
 
     # Simulate the legacy cumulative page total retained from older records.
     updated = client.patch(f"/students/{student_id}", headers=headers, json={
-        "completed_pages": 59.5,
+        "completed_pages": 59.0,
     })
     assert updated.status_code == 200, updated.text
 
