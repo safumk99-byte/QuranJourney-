@@ -1,5 +1,11 @@
 name: Build Madani Mushaf Geometry
 on:
+  push:
+    branches:
+      - feat/mushaf-ayah-geometry
+    paths:
+      - "scripts/build_mushaf_geometry.py"
+      - ".github/workflows/build-mushaf-geometry.yml"
   workflow_dispatch:
 permissions:
   contents: read
