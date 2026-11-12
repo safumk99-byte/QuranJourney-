@@ -977,12 +977,7 @@ def _normalize_curriculum_juz(value: int | None) -> int:
     return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild active-Juz progress from unique New Lesson ayah coverage.
-
-    current_juz is always the Juz currently being studied. New lessons are
-    attributed to their canonical Juz; once the active Juz is fully covered,
-    the active Juz advances to the previous one (30 -> 29 -> ... -> 26).
-    """
+    """Track the active Juz in Madani Mushaf order, studying Surahs backwards."""
     student = db.get(Student, student_id)
     if student is None:
         return
@@ -1002,52 +997,82 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         if reading_page_count(entry.pages) <= 0:
             continue
         try:
-            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
-            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+            a = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            b = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
         except (TypeError, ValueError, IndexError):
             continue
-        if 0 <= start <= sum(SURAH_AYAH_COUNTS) - 1 and 0 <= end <= sum(SURAH_AYAH_COUNTS) - 1:
-            intervals.append((min(start, end), max(start, end)))
+        if 0 <= a <= sum(SURAH_AYAH_COUNTS)-1 and 0 <= b <= sum(SURAH_AYAH_COUNTS)-1:
+            intervals.append((min(a, b), max(a, b)))
 
     merged: list[list[int]] = []
-    for start, end in sorted(intervals):
-        if merged and start <= merged[-1][1] + 1:
-            merged[-1][1] = max(merged[-1][1], end)
+    for left, right in sorted(intervals):
+        if merged and left <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], right)
         else:
-            merged.append([start, end])
+            merged.append([left, right])
 
-    by_juz: dict[int, float] = {}
-    for _page, page_start, page_end in _QURAN_PAGE_INTERVALS:
-        page_length = page_end - page_start + 1
-        for actual_juz, juz_start, juz_end in _QURAN_JUZ_INTERVALS:
-            left_bound, right_bound = max(page_start, juz_start), min(page_end, juz_end)
-            if left_bound > right_bound:
-                continue
-            covered = sum(
-                max(0, min(end, right_bound) - max(start, left_bound) + 1)
-                for start, end in merged
-            )
-            if covered:
-                by_juz[actual_juz] = by_juz.get(actual_juz, 0.0) + covered / page_length
+    def is_covered(left: int, right: int) -> bool:
+        return any(a <= left and b >= right for a, b in merged)
+
+    def contiguous_suffix_end(start_at: int, lower_bound: int) -> int:
+        """Return the lowest continuously covered ordinal ending at start_at."""
+        for a, b in reversed(merged):
+            if a <= start_at <= b:
+                return max(a, lower_bound)
+            if b < start_at:
+                break
+        return start_at + 1
+
+    def page_units(left: int, right: int) -> float:
+        total = 0.0
+        for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+            overlap = min(right, page_right) - max(left, page_left) + 1
+            if overlap > 0:
+                total += overlap / (page_right - page_left + 1)
+        return total
 
     previous_current = _normalize_curriculum_juz(student.current_juz)
     current = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    # Progress belongs to current_juz itself, not current_juz - 1.
+    baseline_pages = max(0.0, float(student.juz_progress_base_pages or 0))
+    progress_pages = 0.0
+
     while current >= 26:
-        available = pending + by_juz.get(current, 0.0)
-        capacity = _juz_page_capacity(current)
-        if capacity <= 0 or available + 1e-6 < capacity:
-            pending = available
+        juz_interval = next(((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == current), None)
+        if not juz_interval:
             break
-        pending = max(0.0, available - capacity)
+        juz_left, juz_right = juz_interval
+        contiguous_right = juz_right
+        complete = True
+        # Madani Mushaf Juz boundaries clipped to each Surah. Study the
+        # Surahs in descending order, completing the final Surah first.
+        for surah in range(114, 0, -1):
+            surah_left = _ayah_ordinal(surah, 1)
+            surah_right = surah_left + SURAH_AYAH_COUNTS[surah - 1] - 1
+            left, right = max(juz_left, surah_left), min(juz_right, surah_right)
+            if left > right:
+                continue
+            if is_covered(left, right):
+                progress_pages += page_units(left, right)
+                contiguous_right = left - 1
+                continue
+            suffix_left = contiguous_suffix_end(contiguous_right, left)
+            if suffix_left <= contiguous_right:
+                progress_pages += page_units(suffix_left, contiguous_right)
+            complete = False
+            break
+
+        if not complete:
+            break
         if current == 26:
-            pending = 0.0
+            current = 26
+            progress_pages = 0.0
             break
         current -= 1
+        # The next Juz has its own independent reverse-Surah sequence.
+        progress_pages = 0.0
 
     student.current_juz = current
-    student.next_juz_pages = round(pending, 2)
+    student.next_juz_pages = round(baseline_pages + progress_pages, 2) if current > 26 else 0.0
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
