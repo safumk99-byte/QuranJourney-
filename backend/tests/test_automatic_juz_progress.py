@@ -18,7 +18,7 @@ def create_student(client, headers, code="JUZ-001", current_juz=30):
     return response.json()["id"]
 
 
-def lesson(client, headers, student_id, *, start_surah=67, start_ayah=1, end_surah=67, end_ayah=5, pages="1"):
+def lesson(client, headers, student_id, *, start_surah=66, start_ayah=1, end_surah=66, end_ayah=5, pages="1"):
     return client.post(f"/students/{student_id}/reading", headers=headers, json={
         "entry_date": "2026-11-01T12:00:00",
         "start_surah": start_surah,
@@ -38,7 +38,7 @@ def get_student(client, headers, student_id):
     return next(row for row in response.json() if row["id"] == student_id)
 
 
-def test_progress_juz_2_tracks_actual_juz_29_and_deduplicates_ayahs(client):
+def test_progress_tracks_active_juz_30_and_deduplicates_ayahs(client):
     headers = login(client)
     student_id = create_student(client, headers)
 
@@ -57,7 +57,7 @@ def test_progress_juz_2_tracks_actual_juz_29_and_deduplicates_ayahs(client):
 def test_juz_26_is_the_final_curriculum_unit(client):
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-002", current_juz=26)
-    # Even a complete lesson in Juz 25 must not advance this curriculum.
+    # A lesson outside the active final Juz must not change its progress.
     response = lesson(
         client, headers, student_id,
         start_surah=44, start_ayah=1, end_surah=44, end_ayah=59, pages="5",
