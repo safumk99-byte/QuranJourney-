@@ -977,7 +977,12 @@ def _normalize_curriculum_juz(value: int | None) -> int:
     return max(26, min(30, number))
 
 def _sync_student_juz_progress(db: Session, student_id: int) -> None:
-    """Rebuild sequential study progress from unique New Lesson ayah coverage."""
+    """Rebuild active-Juz progress from unique New Lesson ayah coverage.
+
+    current_juz is always the Juz currently being studied. New lessons are
+    attributed to their canonical Juz; once the active Juz is fully covered,
+    the active Juz advances to the previous one (30 -> 29 -> ... -> 26).
+    """
     student = db.get(Student, student_id)
     if student is None:
         return
@@ -985,11 +990,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
 
-    # New Lesson coordinates are stored in the primary range columns. Revision
-    # ranges use their own columns and therefore never enter this calculation.
-    # Do not require the legacy new_lesson text field: the current form stores
-    # the range and page count while intentionally leaving that field null.
-    # Rebuild from coordinates so older rows are included as well.
     intervals: list[tuple[int, int]] = []
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
@@ -1009,7 +1009,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         if 0 <= start <= sum(SURAH_AYAH_COUNTS) - 1 and 0 <= end <= sum(SURAH_AYAH_COUNTS) - 1:
             intervals.append((min(start, end), max(start, end)))
 
-    # Merge overlapping/repeated ranges so duplicate Ayahs are never counted twice.
     merged: list[list[int]] = []
     for start, end in sorted(intervals):
         if merged and start <= merged[-1][1] + 1:
@@ -1034,19 +1033,21 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     previous_current = _normalize_curriculum_juz(student.current_juz)
     current = _normalize_curriculum_juz(student.juz_progress_base_juz)
     pending = max(0.0, float(student.juz_progress_base_pages or 0))
-    # Move down from Juz 30 to Juz 26 only. Juz 26 is the final curriculum unit.
-    while current > 26:
-        next_actual_juz = current - 1
-        available = pending + by_juz.get(next_actual_juz, 0.0)
-        capacity = _juz_page_capacity(next_actual_juz)
+    # Progress belongs to current_juz itself, not current_juz - 1.
+    while current >= 26:
+        available = pending + by_juz.get(current, 0.0)
+        capacity = _juz_page_capacity(current)
         if capacity <= 0 or available + 1e-6 < capacity:
             pending = available
             break
         pending = max(0.0, available - capacity)
+        if current == 26:
+            pending = 0.0
+            break
         current -= 1
 
     student.current_juz = current
-    student.next_juz_pages = 0.0 if current == 26 else round(pending, 2)
+    student.next_juz_pages = round(pending, 2)
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
