@@ -7,6 +7,7 @@ import random
 import base64
 import binascii
 import io
+import math
 import re
 import sqlite3
 import tempfile
@@ -1653,7 +1654,7 @@ def discipline_summary(user: User = Depends(require_teacher), db: Session = Depe
         ReadingEntry.entry_date <= month_end,
     )).all()
     for entry in reading_rows:
-        earned[entry.student_id] = earned.get(entry.student_id, 0.0) + reading_page_count(entry.pages) * 10 + reading_page_count(entry.recent_pages) + reading_page_count(entry.general_pages)
+        earned[entry.student_id] = earned.get(entry.student_id, 0.0) + math.floor(reading_page_count(entry.pages) * 10 + 0.5) + reading_page_count(entry.recent_pages) + reading_page_count(entry.general_pages)
     return [{"student_id": s.id, "name": s.name, "class_name": s.class_name,
         "month": month_start.strftime("%Y-%m"),
         "academic_points": round(earned.get(s.id, 0), 1),
@@ -1787,7 +1788,7 @@ def points_leaderboard(year: int = Query(default=date.today().year, ge=2000, le=
         bucket = totals.get(entry.student_id)
         if bucket is None:
             continue
-        bucket["new_lesson_points"] += page_value(entry.pages) * 10
+        bucket["new_lesson_points"] += math.floor(page_value(entry.pages) * 10 + 0.5)
         bucket["recent_revision_points"] += page_value(entry.recent_pages)
         bucket["general_revision_points"] += page_value(entry.general_pages)
     students_by_id = {student.id: student for student in active_students}
