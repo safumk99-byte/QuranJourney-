@@ -18,7 +18,7 @@ def create_student(client, headers, code="JUZ-001", current_juz=30):
     return response.json()["id"]
 
 
-def lesson(client, headers, student_id, *, start_surah=78, start_ayah=1, end_surah=78, end_ayah=5, pages="1"):
+def lesson(client, headers, student_id, *, start_surah=114, start_ayah=1, end_surah=114, end_ayah=5, pages="1"):
     return client.post(f"/students/{student_id}/reading", headers=headers, json={
         "entry_date": "2026-11-01T12:00:00",
         "start_surah": start_surah,
