@@ -1034,7 +1034,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     previous_current = _normalize_curriculum_juz(student.current_juz)
     current = _normalize_curriculum_juz(student.juz_progress_base_juz)
     baseline_pages = max(0.0, float(student.juz_progress_base_pages or 0))
-    progress_pages = 0.0
+    progress_pages = baseline_pages
 
     while current >= 26:
         juz_interval = next(((a, b) for number, a, b in _QURAN_JUZ_INTERVALS if number == current), None)
@@ -1072,7 +1072,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         progress_pages = 0.0
 
     student.current_juz = current
-    student.next_juz_pages = round(baseline_pages + progress_pages, 2) if current > 26 else 0.0
+    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
