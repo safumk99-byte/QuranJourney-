@@ -1029,8 +1029,25 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
         None,
     )
+    # Anchor at the first New Lesson captured in the active Juz. Earlier
+    # portions may have been studied before this app was introduced.
+    anchor_ordinal = None
+    if active_interval:
+        for entry in lessons:
+            try:
+                left = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+                right = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+            except (TypeError, ValueError, IndexError):
+                continue
+            clipped_left = max(left, active_interval[0])
+            clipped_right = min(right, active_interval[1])
+            if clipped_left <= clipped_right:
+                anchor_ordinal = clipped_left
+                break
+
     progress_pages = calculate_juz_page_progress(
-        covered_ranges, active_interval, SURAH_AYAH_COUNTS, _MUSHAF_GEOMETRY
+        covered_ranges, active_interval, SURAH_AYAH_COUNTS, _MUSHAF_GEOMETRY,
+        anchor_ordinal=anchor_ordinal,
     ) if active_interval else 0.0
 
     student.current_juz = current

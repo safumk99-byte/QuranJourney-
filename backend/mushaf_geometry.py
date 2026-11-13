@@ -38,8 +38,9 @@ def calculate_juz_page_progress(
     juz_interval: tuple[int, int],
     surah_counts: list[int],
     geometry,
+    anchor_ordinal: int | None = None,
 ) -> float:
-    """Sequential page-equivalents in reverse-Surah curriculum order."""
+    """Sequential page-equivalents from the first recorded ayah in this Juz."""
     start, end = juz_interval
     area_by_ayah, page_by_ayah = geometry
     covered: set[int] = set()
@@ -49,32 +50,37 @@ def calculate_juz_page_progress(
             covered.update(range(lo, hi + 1))
 
     # Curriculum: descending Surah number, ascending Ayah within each Surah.
-    sequential: set[int] = set()
+    ordered = []
     for surah in range(len(surah_counts), 0, -1):
         for ayah in range(1, surah_counts[surah - 1] + 1):
             ordinal = _ordinal(surah, ayah, surah_counts)
-            if not start <= ordinal <= end:
-                continue
-            if ordinal not in covered:
-                page_totals = {}
-                page_done = {}
-                for key, area in area_by_ayah.items():
-                    key_ord = _ordinal(key[0], key[1], surah_counts)
-                    if start <= key_ord <= end:
-                        page = page_by_ayah[key]
-                        page_totals[page] = page_totals.get(page, 0) + area
-                        if key_ord in sequential:
-                            page_done[page] = page_done.get(page, 0) + area
-                return round(sum(
-                    min(1.0, page_done.get(page, 0) / total)
-                    for page, total in page_totals.items() if total > 0
-                ), 4)
-            sequential.add(ordinal)
+            if start <= ordinal <= end:
+                ordered.append(ordinal)
+    if anchor_ordinal is not None and anchor_ordinal in ordered:
+        ordered = ordered[ordered.index(anchor_ordinal):]
+
+    sequential: set[int] = set()
+    for ordinal in ordered:
+        if ordinal not in covered:
+            page_totals = {}
+            page_done = {}
+            for key, area in area_by_ayah.items():
+                key_ord = _ordinal(key[0], key[1], surah_counts)
+                if key_ord in ordered:
+                    page = page_by_ayah[key]
+                    page_totals[page] = page_totals.get(page, 0) + area
+                    if key_ord in sequential:
+                        page_done[page] = page_done.get(page, 0) + area
+            return round(sum(
+                min(1.0, page_done.get(page, 0) / total)
+                for page, total in page_totals.items() if total > 0
+            ), 4)
+        sequential.add(ordinal)
 
     page_totals, page_done = {}, {}
     for key, area in area_by_ayah.items():
         ordinal = _ordinal(key[0], key[1], surah_counts)
-        if start <= ordinal <= end:
+        if ordinal in ordered:
             page = page_by_ayah[key]
             page_totals[page] = page_totals.get(page, 0) + area
             if ordinal in sequential:
