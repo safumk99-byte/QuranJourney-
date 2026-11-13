@@ -1,0 +1,46 @@
+name: Build Madani Mushaf Geometry
+on:
+  push:
+    branches:
+      - feat/mushaf-ayah-geometry
+    paths:
+      - "scripts/build_mushaf_geometry.py"
+      - ".github/workflows/build-mushaf-geometry.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-geometry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Juz 26-30 page geometry
+        run: python scripts/build_mushaf_geometry.py --output backend/mushaf_ayah_geometry.json
+      - name: Validate generated dataset
+        run: |
+          python - <<'PY'
+          import json
+          data = json.load(open("backend/mushaf_ayah_geometry.json", encoding="utf-8"))
+          assert len(data["pages"]) == 103, len(data["pages"])
+          assert data["pages"][0]["page"] == 502
+          assert data["pages"][-1]["page"] == 604
+          assert data["pages"][0]["ayah_areas"][0]["surah"] == 45
+          assert all(p["page_area"] > 0 for p in data["pages"])
+          print("Validated", len(data["pages"]), "pages")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: madani-mushaf-geometry-juz-26-30
+          path: backend/mushaf_ayah_geometry.json
+      - name: Commit generated geometry dataset
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/mushaf_ayah_geometry.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Add generated Madani Mushaf geometry dataset"
+            git push
+          fi
