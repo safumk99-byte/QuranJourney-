@@ -1067,32 +1067,47 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     # to obtain progress inside the active Juz. This also preserves progress
     # entered before Ayah-coordinate tracking was introduced.
     base_juz = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    if base_juz > current:
-        # This student has crossed a Juz boundary since the legacy baseline.
-        # Their cumulative page total preserves older lessons that predate
-        # stored Ayah coordinates; subtract the actual capacities of prior
-        # curriculum Juz to isolate the active Juz.
+    active_interval = next(
+        ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
+        None,
+    )
+    active_has_ayah_coverage = bool(
+        active_interval and any(
+            max(left, active_interval[0]) <= min(right, active_interval[1])
+            for left, right in covered
+        )
+    )
+    if active_has_ayah_coverage:
+        # Ayah coordinates are authoritative whenever this Juz has recorded
+        # New Lesson coverage. Do not estimate its pages by subtracting fixed
+        # Juz capacities from the teacher-entered cumulative page total.
+        progress_pages = covered_page_units(*active_interval)
+    elif base_juz > current:
+        # Compatibility fallback only for legacy students who have advanced
+        # beyond their baseline but have no Ayah-coordinate records in this Juz.
         completed_total = max(0.0, float(student.completed_pages or 0))
         completed_before_active = sum(
             _juz_page_capacity(number)
             for number in range(30, current, -1)
         )
-        active_capacity = _juz_page_capacity(current)
         progress_pages = min(
-            active_capacity,
+            _juz_page_capacity(current),
             max(0.0, completed_total - completed_before_active),
         )
     else:
-        # Within the same Juz, use the deduplicated Ayah intervals and the
-        # Madani page map so repeated lesson ranges do not add pages twice.
-        active_interval = next(
-            ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
-            None,
+        # Preserve any existing same-Juz baseline for legacy records, then
+        # add the unique coordinate-backed coverage recorded after migration.
+        baseline_pages = (
+            max(0.0, float(student.juz_progress_base_pages or 0))
+            if base_juz == current else 0.0
         )
-        progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
+        progress_pages = baseline_pages + (
+            covered_page_units(*active_interval) if active_interval else 0.0
+        )
 
     student.current_juz = current
-    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
+    # Juz 26 is part of the five-Juz curriculum too; never suppress its pages.
+    student.next_juz_pages = round(min(_juz_page_capacity(current), progress_pages), 2)
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
@@ -1422,7 +1437,7 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         reading_rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(reading_by_student)).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
         for entry in reading_rows:
             reading_by_student.setdefault(entry.student_id, []).append(entry)
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "actual_completed_pages": _actual_completed_pages_from_entries(reading_by_student.get(s.id, []), s.completed_pages), "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "actual_completed_pages": _actual_completed_pages_from_entries(reading_by_student.get(s.id, []), s.completed_pages), "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "current_juz_capacity": _juz_page_capacity(_normalize_curriculum_juz(s.current_juz)), "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
