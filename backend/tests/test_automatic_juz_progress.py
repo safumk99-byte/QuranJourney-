@@ -212,11 +212,12 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == 16.5
+    # Juz 28 is studied from Surah 66 down to 58. A lone lesson in 59
+    # cannot count until the earlier curriculum sequence is covered.
+    assert progress["next_juz_pages"] == 0.0
 
 
-def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client):
-    from main import _juz_page_capacity
+def test_active_juz_progress_ignores_stale_lifetime_page_total(client):
 
     headers = login(client)
     student_id = create_student(client, headers, "JUZ-CUMULATIVE", current_juz=29)
@@ -231,4 +232,5 @@ def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+    # Lifetime completed_pages must not invent current-Juz coverage.
+    assert progress["next_juz_pages"] == 0.0
