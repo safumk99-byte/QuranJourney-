@@ -285,22 +285,28 @@ def test_revision_only_entry_does_not_add_to_actual_completed_pages():
     assert _actual_completed_pages_from_entries([revision_only], 0.0) == 0.0
 
 
-def test_active_juz_26_pages_are_not_hidden():
-    from datetime import date
-    from main import ReadingEntry, _sync_student_juz_progress, Student, SessionLocal
+def test_active_juz_26_pages_are_not_hidden(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-26-PAGES", current_juz=26)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=46, start_ayah=1, end_surah=46, end_ayah=20, pages="2",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 26
+    assert progress["next_juz_pages"] > 0
+    assert progress["next_juz_pages"] <= 19.5
 
-    with SessionLocal() as db:
-        student = Student(student_code="JUZ-26-PAGES", name="Juz 26 Pages", current_juz=26)
-        db.add(student)
-        db.flush()
-        row = ReadingEntry(
-            student_id=student.id, entry_date=date(2026, 11, 1), pages="2",
-            start_surah=46, start_ayah=1, end_surah=46, end_ayah=20,
-        )
-        db.add(row)
-        db.flush()
-        _sync_student_juz_progress(db, student.id)
-        assert student.current_juz == 26
-        assert student.next_juz_pages > 0
-        assert student.next_juz_pages <= 19.5
-        db.rollback()
+
+def test_lesson_outside_five_juz_curriculum_does_not_add_final_juz_pages(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-26-OUTSIDE", current_juz=26)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=44, start_ayah=1, end_surah=44, end_ayah=59, pages="5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 26
+    assert progress["next_juz_pages"] == 0.0
