@@ -263,7 +263,7 @@ def test_actual_completed_pages_preserves_manual_baseline_and_legacy_entries():
     result = _actual_completed_pages_from_entries(
         [coordinate_lesson, legacy_lesson], 8.0
     )
-    assert result == 9.0  # 5-page opening baseline + 2 legacy pages + 2 unique Mushaf pages
+    assert result == 8.0  # 5-page opening baseline + 2 legacy pages + 1 unique Mushaf page
 
 
 def test_actual_completed_pages_uses_legacy_total_when_no_ayah_coordinates_exist():
