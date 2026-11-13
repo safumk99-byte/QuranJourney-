@@ -232,3 +232,54 @@ def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
     assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+
+
+def test_actual_completed_pages_deduplicates_repeated_ayah_ranges():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    first = ReadingEntry(student_id=1, entry_date=date(2026, 11, 1), pages="1",
+                         start_surah=114, start_ayah=1, end_surah=114, end_ayah=6)
+    duplicate = ReadingEntry(student_id=1, entry_date=date(2026, 11, 2), pages="1",
+                             start_surah=114, start_ayah=1, end_surah=114, end_ayah=6)
+
+    one = _actual_completed_pages_from_entries([first], 1.0)
+    repeated = _actual_completed_pages_from_entries([first, duplicate], 2.0)
+    assert repeated == one
+
+
+def test_actual_completed_pages_preserves_manual_baseline_and_legacy_entries():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    coordinate_lesson = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 1), pages="1",
+        start_surah=114, start_ayah=1, end_surah=114, end_ayah=6,
+    )
+    legacy_lesson = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 2), pages="2",
+    )
+
+    result = _actual_completed_pages_from_entries(
+        [coordinate_lesson, legacy_lesson], 8.0
+    )
+    assert result == 9.0  # 5-page opening baseline + 2 legacy pages + 2 unique Mushaf pages
+
+
+def test_actual_completed_pages_uses_legacy_total_when_no_ayah_coordinates_exist():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    legacy = ReadingEntry(student_id=1, entry_date=date(2026, 11, 1), pages="1.5")
+    assert _actual_completed_pages_from_entries([legacy], 4.5) == 4.5
+
+
+def test_revision_only_entry_does_not_add_to_actual_completed_pages():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    revision_only = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 1), pages="0",
+        recent_pages="2", general_pages="3",
+    )
+    assert _actual_completed_pages_from_entries([revision_only], 0.0) == 0.0
