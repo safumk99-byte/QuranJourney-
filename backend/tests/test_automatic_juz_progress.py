@@ -212,7 +212,7 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == 16.5
+    assert progress["next_juz_pages"] == 19.75
 
 
 def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client):
@@ -231,4 +231,82 @@ def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+    assert progress["next_juz_pages"] == round(progress["actual_completed_pages"] - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+
+
+def test_actual_completed_pages_deduplicates_repeated_ayah_ranges():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    first = ReadingEntry(student_id=1, entry_date=date(2026, 11, 1), pages="1",
+                         start_surah=114, start_ayah=1, end_surah=114, end_ayah=6)
+    duplicate = ReadingEntry(student_id=1, entry_date=date(2026, 11, 2), pages="1",
+                             start_surah=114, start_ayah=1, end_surah=114, end_ayah=6)
+
+    one = _actual_completed_pages_from_entries([first], 1.0)
+    repeated = _actual_completed_pages_from_entries([first, duplicate], 2.0)
+    assert repeated == one
+
+
+def test_actual_completed_pages_preserves_manual_baseline_and_legacy_entries():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    coordinate_lesson = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 1), pages="1",
+        start_surah=114, start_ayah=1, end_surah=114, end_ayah=6,
+    )
+    legacy_lesson = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 2), pages="2",
+    )
+
+    result = _actual_completed_pages_from_entries(
+        [coordinate_lesson, legacy_lesson], 8.0
+    )
+    assert result == 7.4  # 5-page opening baseline + 2 legacy pages + 0.4 unique Mushaf page
+
+
+def test_actual_completed_pages_uses_legacy_total_when_no_ayah_coordinates_exist():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    legacy = ReadingEntry(student_id=1, entry_date=date(2026, 11, 1), pages="1.5")
+    assert _actual_completed_pages_from_entries([legacy], 4.5) == 4.5
+
+
+def test_revision_only_entry_does_not_add_to_actual_completed_pages():
+    from datetime import date
+    from main import ReadingEntry, _actual_completed_pages_from_entries
+
+    revision_only = ReadingEntry(
+        student_id=1, entry_date=date(2026, 11, 1), pages="0",
+        recent_pages="2", general_pages="3",
+    )
+    assert _actual_completed_pages_from_entries([revision_only], 0.0) == 0.0
+
+
+def test_active_juz_26_pages_are_not_hidden(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-26-PAGES", current_juz=26)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=46, start_ayah=1, end_surah=46, end_ayah=20, pages="2",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 26
+    assert progress["next_juz_pages"] > 0
+    assert progress["next_juz_pages"] <= 19.5
+
+
+def test_lesson_outside_five_juz_curriculum_does_not_add_final_juz_pages(client):
+    headers = login(client)
+    student_id = create_student(client, headers, "JUZ-26-OUTSIDE", current_juz=26)
+    response = lesson(
+        client, headers, student_id,
+        start_surah=44, start_ayah=1, end_surah=44, end_ayah=59, pages="5",
+    )
+    assert response.status_code == 201, response.text
+    progress = get_student(client, headers, student_id)
+    assert progress["current_juz"] == 26
+    assert progress["next_juz_pages"] == 0.0

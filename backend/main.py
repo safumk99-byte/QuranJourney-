@@ -987,10 +987,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
 
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
-        ReadingEntry.start_surah.is_not(None),
-        ReadingEntry.start_ayah.is_not(None),
-        ReadingEntry.end_surah.is_not(None),
-        ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
 
     # Build unique Ayah coverage from New Lesson ranges. Page totals are
@@ -1052,47 +1048,55 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     if latest_lesson is not None:
         try:
             latest_ordinal = _ayah_ordinal(int(latest_lesson.end_surah), int(latest_lesson.end_ayah))
-            current = next(
+            detected_juz = next(
                 (number for number, left, right in _QURAN_JUZ_INTERVALS
                  if left <= latest_ordinal <= right),
-                _normalize_curriculum_juz(student.current_juz),
+                None,
+            )
+            # This product's reverse-memorisation curriculum is limited to
+            # Juz 30..26. A lesson in Juz 25 or earlier must not be reported
+            # as progress in the final curriculum unit (Juz 26).
+            current = (
+                detected_juz
+                if detected_juz is not None and 26 <= detected_juz <= 30
+                else _normalize_curriculum_juz(student.current_juz)
             )
         except (TypeError, ValueError, IndexError):
             current = _normalize_curriculum_juz(student.current_juz)
     else:
         current = _normalize_curriculum_juz(student.current_juz)
 
-    # completed_pages is the cumulative New Lesson page total. Subtract the
-    # actual Madani capacities of all earlier curriculum Juz (30 downward)
-    # to obtain progress inside the active Juz. This also preserves progress
-    # entered before Ayah-coordinate tracking was introduced.
-    base_juz = _normalize_curriculum_juz(student.juz_progress_base_juz)
-    if base_juz > current:
-        # This student has crossed a Juz boundary since the legacy baseline.
-        # Their cumulative page total preserves older lessons that predate
-        # stored Ayah coordinates; subtract the actual capacities of prior
-        # curriculum Juz to isolate the active Juz.
-        completed_total = max(0.0, float(student.completed_pages or 0))
-        completed_before_active = sum(
-            _juz_page_capacity(number)
-            for number in range(30, current, -1)
-        )
-        active_capacity = _juz_page_capacity(current)
-        progress_pages = min(
-            active_capacity,
-            max(0.0, completed_total - completed_before_active),
-        )
-    else:
-        # Within the same Juz, use the deduplicated Ayah intervals and the
-        # Madani page map so repeated lesson ranges do not add pages twice.
-        active_interval = next(
-            ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
-            None,
-        )
-        progress_pages = covered_page_units(*active_interval) if active_interval else 0.0
+    # Preserve legacy cumulative progress while using Ayah coverage to
+    # correct duplicate/overlapping entries. completed_pages may include
+    # lessons recorded before Ayah coordinates were introduced, so using
+    # coordinates alone can incorrectly reset an active Juz to a few pages.
+    active_interval = next(
+        ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
+        None,
+    )
+    coordinate_pages = covered_page_units(*active_interval) if active_interval else 0.0
+    # Reconcile legacy/manual totals with unique coordinate-backed Ayah
+    # coverage. This removes duplicate lesson entries without discarding the
+    # opening baseline or older entries that have no Ayah coordinates.
+    completed_total = _actual_completed_pages_from_entries(
+        rows, float(student.completed_pages or 0)
+    )
+    completed_before_active = sum(
+        _juz_page_capacity(number)
+        for number in range(30, current, -1)
+    )
+    cumulative_pages = max(0.0, completed_total - completed_before_active)
+    cumulative_pages = min(_juz_page_capacity(current), cumulative_pages)
+    baseline_pages = (
+        max(0.0, float(student.juz_progress_base_pages or 0))
+        if _normalize_curriculum_juz(student.juz_progress_base_juz) == current
+        else 0.0
+    )
+    progress_pages = max(coordinate_pages, cumulative_pages, baseline_pages)
 
     student.current_juz = current
-    student.next_juz_pages = round(progress_pages, 2) if current > 26 else 0.0
+    # Juz 26 is part of the five-Juz curriculum too; never suppress its pages.
+    student.next_juz_pages = round(min(_juz_page_capacity(current), progress_pages), 2)
     if current < previous_current:
         notify_student_parents(
             db, student.id, f"current-juz:{current}", "New Juz reached",
@@ -1346,6 +1350,67 @@ def change_teacher_credentials(data: ChangeTeacherCredentialsInput, user: User =
     db.commit()
     return {"success": True, "login_id": user.login_id, "message": "Login ID and password updated. Please sign in again."}
 
+def _actual_completed_pages_from_entries(entries: list[ReadingEntry], legacy_total: float) -> float:
+    """Calculate unique New Lesson page coverage from the official Madani page map.
+
+    Keep the legacy cumulative value for students whose historical records do
+    not contain Ayah coordinates. Once coordinate-backed lessons exist, count
+    only their unique Ayah coverage so overlapping/repeated ranges cannot
+    inflate the student's completed-page total.
+    """
+    covered: list[list[int]] = []
+    has_coordinate_lesson = False
+    legacy_only_pages = 0.0
+    all_entry_page_estimates = 0.0
+    max_ordinal = sum(SURAH_AYAH_COUNTS) - 1
+
+    for entry in entries:
+        entry_pages = reading_page_count(entry.pages)
+        if entry_pages <= 0:
+            continue
+        all_entry_page_estimates += entry_pages
+        try:
+            if None in (entry.start_surah, entry.start_ayah, entry.end_surah, entry.end_ayah):
+                legacy_only_pages += reading_page_count(entry.pages)
+                continue
+            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+        except (TypeError, ValueError, IndexError):
+            legacy_only_pages += reading_page_count(entry.pages)
+            continue
+        if not (0 <= start <= max_ordinal and 0 <= end <= max_ordinal):
+            legacy_only_pages += reading_page_count(entry.pages)
+            continue
+        has_coordinate_lesson = True
+        left, right = sorted((start, end))
+        covered.append([left, right])
+
+    if not has_coordinate_lesson:
+        return round(min(float(legacy_total or 0), 604.0), 2)
+
+    covered.sort()
+    merged: list[list[int]] = []
+    for left, right in covered:
+        if merged and left <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], right)
+        else:
+            merged.append([left, right])
+
+    total = 0.0
+    for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+        page_size = page_right - page_left + 1
+        covered_ayahs = sum(
+            max(0, min(page_right, right) - max(page_left, left) + 1)
+            for left, right in merged
+        )
+        total += min(page_size, covered_ayahs) / page_size
+
+    # Keep page estimates from older entries that predate Ayah-coordinate tracking.
+    # Preserve any opening/manual baseline already included in completed_pages.
+    legacy_baseline = max(0.0, float(legacy_total or 0) - all_entry_page_estimates)
+    return round(min(604.0, max(0.0, legacy_baseline + total + legacy_only_pages)), 2)
+
+
 @app.get("/students")
 def list_students(user: User = Depends(current_user), db: Session = Depends(get_db)):
     ids = allowed_student_ids(user, db)
@@ -1356,7 +1421,12 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         query = query.where(Student.id.in_(ids))
     student_rows = db.scalars(query.order_by(Student.name)).all()
     lesson_days = dict(db.execute(select(ReadingEntry.student_id, func.count(func.distinct(ReadingEntry.entry_date))).where(ReadingEntry.student_id.in_([s.id for s in student_rows] or [-1]), func.cast(ReadingEntry.pages, Float) > 0).group_by(ReadingEntry.student_id)).all())
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
+    reading_by_student: dict[int, list[ReadingEntry]] = {s.id: [] for s in student_rows}
+    if reading_by_student:
+        reading_rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(reading_by_student)).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+        for entry in reading_rows:
+            reading_by_student.setdefault(entry.student_id, []).append(entry)
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "actual_completed_pages": _actual_completed_pages_from_entries(reading_by_student.get(s.id, []), s.completed_pages), "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "current_juz_capacity": _juz_page_capacity(_normalize_curriculum_juz(s.current_juz)), "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
