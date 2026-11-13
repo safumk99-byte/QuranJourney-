@@ -987,10 +987,6 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
 
     rows = db.scalars(select(ReadingEntry).where(
         ReadingEntry.student_id == student_id,
-        ReadingEntry.start_surah.is_not(None),
-        ReadingEntry.start_ayah.is_not(None),
-        ReadingEntry.end_surah.is_not(None),
-        ReadingEntry.end_ayah.is_not(None),
     ).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
 
     # Build unique Ayah coverage from New Lesson ranges. Page totals are
@@ -1079,7 +1075,12 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         None,
     )
     coordinate_pages = covered_page_units(*active_interval) if active_interval else 0.0
-    completed_total = max(0.0, float(student.completed_pages or 0))
+    # Reconcile legacy/manual totals with unique coordinate-backed Ayah
+    # coverage. This removes duplicate lesson entries without discarding the
+    # opening baseline or older entries that have no Ayah coordinates.
+    completed_total = _actual_completed_pages_from_entries(
+        rows, float(student.completed_pages or 0)
+    )
     completed_before_active = sum(
         _juz_page_capacity(number)
         for number in range(30, current, -1)
