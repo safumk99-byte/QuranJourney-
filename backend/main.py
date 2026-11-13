@@ -1356,6 +1356,7 @@ def _actual_completed_pages_from_entries(entries: list[ReadingEntry], legacy_tot
     """
     covered: list[list[int]] = []
     has_coordinate_lesson = False
+    legacy_only_pages = 0.0
     max_ordinal = sum(SURAH_AYAH_COUNTS) - 1
 
     for entry in entries:
@@ -1363,12 +1364,15 @@ def _actual_completed_pages_from_entries(entries: list[ReadingEntry], legacy_tot
             continue
         try:
             if None in (entry.start_surah, entry.start_ayah, entry.end_surah, entry.end_ayah):
+                legacy_only_pages += reading_page_count(entry.pages)
                 continue
             start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
             end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
         except (TypeError, ValueError, IndexError):
+            legacy_only_pages += reading_page_count(entry.pages)
             continue
         if not (0 <= start <= max_ordinal and 0 <= end <= max_ordinal):
+            legacy_only_pages += reading_page_count(entry.pages)
             continue
         has_coordinate_lesson = True
         left, right = sorted((start, end))
@@ -1394,7 +1398,8 @@ def _actual_completed_pages_from_entries(entries: list[ReadingEntry], legacy_tot
         )
         total += min(page_size, covered_ayahs) / page_size
 
-    return round(min(604.0, max(0.0, total)), 2)
+    # Keep page estimates from older entries that predate Ayah-coordinate tracking.
+    return round(min(604.0, max(0.0, total + legacy_only_pages)), 2)
 
 
 @app.get("/students")
