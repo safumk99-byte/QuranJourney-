@@ -1346,6 +1346,57 @@ def change_teacher_credentials(data: ChangeTeacherCredentialsInput, user: User =
     db.commit()
     return {"success": True, "login_id": user.login_id, "message": "Login ID and password updated. Please sign in again."}
 
+def _actual_completed_pages_from_entries(entries: list[ReadingEntry], legacy_total: float) -> float:
+    """Calculate unique New Lesson page coverage from the official Madani page map.
+
+    Keep the legacy cumulative value for students whose historical records do
+    not contain Ayah coordinates. Once coordinate-backed lessons exist, count
+    only their unique Ayah coverage so overlapping/repeated ranges cannot
+    inflate the student's completed-page total.
+    """
+    covered: list[list[int]] = []
+    has_coordinate_lesson = False
+    max_ordinal = sum(SURAH_AYAH_COUNTS) - 1
+
+    for entry in entries:
+        if reading_page_count(entry.pages) <= 0:
+            continue
+        try:
+            if None in (entry.start_surah, entry.start_ayah, entry.end_surah, entry.end_ayah):
+                continue
+            start = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
+            end = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not (0 <= start <= max_ordinal and 0 <= end <= max_ordinal):
+            continue
+        has_coordinate_lesson = True
+        left, right = sorted((start, end))
+        covered.append([left, right])
+
+    if not has_coordinate_lesson:
+        return round(min(float(legacy_total or 0), 604.0), 2)
+
+    covered.sort()
+    merged: list[list[int]] = []
+    for left, right in covered:
+        if merged and left <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], right)
+        else:
+            merged.append([left, right])
+
+    total = 0.0
+    for _page, page_left, page_right in _QURAN_PAGE_INTERVALS:
+        page_size = page_right - page_left + 1
+        covered_ayahs = sum(
+            max(0, min(page_right, right) - max(page_left, left) + 1)
+            for left, right in merged
+        )
+        total += min(page_size, covered_ayahs) / page_size
+
+    return round(min(604.0, max(0.0, total)), 2)
+
+
 @app.get("/students")
 def list_students(user: User = Depends(current_user), db: Session = Depends(get_db)):
     ids = allowed_student_ids(user, db)
@@ -1356,7 +1407,12 @@ def list_students(user: User = Depends(current_user), db: Session = Depends(get_
         query = query.where(Student.id.in_(ids))
     student_rows = db.scalars(query.order_by(Student.name)).all()
     lesson_days = dict(db.execute(select(ReadingEntry.student_id, func.count(func.distinct(ReadingEntry.entry_date))).where(ReadingEntry.student_id.in_([s.id for s in student_rows] or [-1]), func.cast(ReadingEntry.pages, Float) > 0).group_by(ReadingEntry.student_id)).all())
-    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
+    reading_by_student: dict[int, list[ReadingEntry]] = {s.id: [] for s in student_rows}
+    if reading_by_student:
+        reading_rows = db.scalars(select(ReadingEntry).where(ReadingEntry.student_id.in_(reading_by_student)).order_by(ReadingEntry.entry_date, ReadingEntry.id)).all()
+        for entry in reading_rows:
+            reading_by_student.setdefault(entry.student_id, []).append(entry)
+    return [{"id": s.id, "student_code": s.student_code, "name": s.name, "class_name": s.class_name, "total_pages": s.total_pages, "completed_pages": s.completed_pages, "actual_completed_pages": _actual_completed_pages_from_entries(reading_by_student.get(s.id, []), s.completed_pages), "new_lesson_days": lesson_days.get(s.id, 0), "current_juz": _normalize_curriculum_juz(s.current_juz), "next_juz_pages": s.next_juz_pages or 0, "journey_start_date": s.journey_start_date.isoformat() if s.journey_start_date else None, "photo_data": s.photo_data, "cleanliness_points": s.cleanliness_points, "discipline_points": s.discipline_points, "worship_points": s.worship_points} for s in student_rows]
 
 @app.post("/students", status_code=201)
 def create_student(data: StudentInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
