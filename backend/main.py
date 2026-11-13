@@ -1029,26 +1029,30 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
         ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
         None,
     )
-    # Anchor at the first New Lesson captured in the active Juz. Earlier
-    # portions may have been studied before this app was introduced.
+    # Only New Lesson ranges intersecting the active Juz are eligible for
+    # its anchor or page progress. A lesson from an earlier/later Juz must
+    # never be interpreted as historical coverage of this active Juz.
+    active_covered_ranges: list[tuple[int, int]] = []
     anchor_ordinal = None
     if active_interval:
-        for entry in lessons:
-            try:
-                left = _ayah_ordinal(int(entry.start_surah), int(entry.start_ayah))
-                right = _ayah_ordinal(int(entry.end_surah), int(entry.end_ayah))
-            except (TypeError, ValueError, IndexError):
-                continue
+        for left, right in covered_ranges:
             clipped_left = max(left, active_interval[0])
             clipped_right = min(right, active_interval[1])
             if clipped_left <= clipped_right:
-                anchor_ordinal = clipped_left
-                break
+                active_covered_ranges.append((clipped_left, clipped_right))
+                if anchor_ordinal is None:
+                    anchor_ordinal = clipped_left
 
-    progress_pages = calculate_juz_page_progress(
-        covered_ranges, active_interval, SURAH_AYAH_COUNTS, _MUSHAF_GEOMETRY,
-        anchor_ordinal=anchor_ordinal,
-    ) if active_interval and anchor_ordinal is not None else 0.0
+    # No recorded lesson in this active Juz means no active-Juz progress.
+    # In particular, out-of-Juz New Lessons cannot seed the historical anchor.
+    progress_pages = (
+        calculate_juz_page_progress(
+            active_covered_ranges, active_interval, SURAH_AYAH_COUNTS,
+            _MUSHAF_GEOMETRY, anchor_ordinal=anchor_ordinal,
+        )
+        if active_interval is not None and anchor_ordinal is not None
+        else 0.0
+    )
 
     student.current_juz = current
     student.next_juz_pages = round(progress_pages, 2)
