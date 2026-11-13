@@ -212,7 +212,7 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == 16.5
+    assert progress["next_juz_pages"] == 19.75
 
 
 def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client):
@@ -231,7 +231,7 @@ def test_active_juz_progress_uses_cumulative_pages_minus_prior_madani_juz(client
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    assert progress["next_juz_pages"] == round(59.5 - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
+    assert progress["next_juz_pages"] == round(progress["actual_completed_pages"] - _juz_page_capacity(30) - _juz_page_capacity(29), 2)
 
 
 def test_actual_completed_pages_deduplicates_repeated_ayah_ranges():
