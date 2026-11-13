@@ -1048,7 +1048,7 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     progress_pages = calculate_juz_page_progress(
         covered_ranges, active_interval, SURAH_AYAH_COUNTS, _MUSHAF_GEOMETRY,
         anchor_ordinal=anchor_ordinal,
-    ) if active_interval else 0.0
+    ) if active_interval and anchor_ordinal is not None else 0.0
 
     student.current_juz = current
     student.next_juz_pages = round(progress_pages, 2)
