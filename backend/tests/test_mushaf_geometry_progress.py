@@ -31,7 +31,7 @@ def test_progress_starts_from_first_recorded_ayah_when_app_begins_mid_juz():
     assert calculate_juz_page_progress(
         [(3, 1), (3, 2), (2, 1)], INTERVAL, COUNTS, GEOMETRY,
         anchor_ordinal=4,
-    ) == 2.0
+    ) == 1.5
 
 
 def test_missing_ayah_after_anchor_still_stops_progress():

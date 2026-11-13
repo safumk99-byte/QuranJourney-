@@ -40,7 +40,12 @@ def calculate_juz_page_progress(
     geometry,
     anchor_ordinal: int | None = None,
 ) -> float:
-    """Sequential page-equivalents from the first recorded ayah in this Juz."""
+    """Cumulative page-equivalents for this Juz.
+
+    When the app starts mid-curriculum, the curriculum portion before the
+    first recorded New Lesson (anchor_ordinal) is treated as historically
+    completed. From the anchor onward, only contiguous recorded Ayahs count.
+    """
     start, end = juz_interval
     area_by_ayah, page_by_ayah = geometry
     covered: set[int] = set()
@@ -56,10 +61,13 @@ def calculate_juz_page_progress(
             ordinal = _ordinal(surah, ayah, surah_counts)
             if start <= ordinal <= end:
                 ordered.append(ordinal)
-    if anchor_ordinal is not None and anchor_ordinal in ordered:
-        ordered = ordered[ordered.index(anchor_ordinal):]
-
     sequential: set[int] = set()
+    if anchor_ordinal is not None and anchor_ordinal in ordered:
+        anchor_index = ordered.index(anchor_ordinal)
+        # The app was introduced after the student had already progressed
+        # through this part of the active Juz. Preserve that prior study.
+        sequential.update(ordered[:anchor_index])
+
     for ordinal in ordered:
         if ordinal not in covered:
             page_totals = {}

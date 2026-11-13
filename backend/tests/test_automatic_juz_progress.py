@@ -212,9 +212,9 @@ def test_latest_new_lesson_surah_overrides_stale_juz_baseline(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    # Juz 28 is studied from Surah 66 down to 58. A lone lesson in 59
-    # cannot count until the earlier curriculum sequence is covered.
-    assert progress["next_juz_pages"] == 0.0
+    # The app began mid-curriculum: Juz 28 before the first recorded
+    # lesson (59:1) is historical completed study.
+    assert progress["next_juz_pages"] == 3.53
 
 
 def test_active_juz_progress_ignores_stale_lifetime_page_total(client):
@@ -232,5 +232,6 @@ def test_active_juz_progress_ignores_stale_lifetime_page_total(client):
     assert response.status_code == 201, response.text
     progress = get_student(client, headers, student_id)
     assert progress["current_juz"] == 28
-    # Lifetime completed_pages must not invent current-Juz coverage.
-    assert progress["next_juz_pages"] == 0.0
+    # Historical coverage before the first recorded lesson in active Juz 28
+    # is retained, independently of the stale lifetime page total.
+    assert progress["next_juz_pages"] == 3.53
