@@ -263,7 +263,7 @@ def test_actual_completed_pages_preserves_manual_baseline_and_legacy_entries():
     result = _actual_completed_pages_from_entries(
         [coordinate_lesson, legacy_lesson], 8.0
     )
-    assert result == 8.0  # 5-page opening baseline + 2 legacy pages + 1 unique Mushaf page
+    assert result == 7.4  # 5-page opening baseline + 2 legacy pages + 0.4 unique Mushaf page
 
 
 def test_actual_completed_pages_uses_legacy_total_when_no_ayah_coordinates_exist():
@@ -283,3 +283,24 @@ def test_revision_only_entry_does_not_add_to_actual_completed_pages():
         recent_pages="2", general_pages="3",
     )
     assert _actual_completed_pages_from_entries([revision_only], 0.0) == 0.0
+
+
+def test_active_juz_26_pages_are_not_hidden():
+    from datetime import date
+    from main import ReadingEntry, _sync_student_juz_progress, Student, SessionLocal
+
+    with SessionLocal() as db:
+        student = Student(student_code="JUZ-26-PAGES", name="Juz 26 Pages", current_juz=26)
+        db.add(student)
+        db.flush()
+        row = ReadingEntry(
+            student_id=student.id, entry_date=date(2026, 11, 1), pages="2",
+            start_surah=46, start_ayah=1, end_surah=46, end_ayah=20,
+        )
+        db.add(row)
+        db.flush()
+        _sync_student_juz_progress(db, student.id)
+        assert student.current_juz == 26
+        assert student.next_juz_pages > 0
+        assert student.next_juz_pages <= 19.5
+        db.rollback()
