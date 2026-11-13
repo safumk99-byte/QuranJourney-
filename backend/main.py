@@ -1052,58 +1052,46 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
     if latest_lesson is not None:
         try:
             latest_ordinal = _ayah_ordinal(int(latest_lesson.end_surah), int(latest_lesson.end_ayah))
-            current = next(
+            detected_juz = next(
                 (number for number, left, right in _QURAN_JUZ_INTERVALS
                  if left <= latest_ordinal <= right),
-                _normalize_curriculum_juz(student.current_juz),
+                None,
+            )
+            # This product's reverse-memorisation curriculum is limited to
+            # Juz 30..26. A lesson in Juz 25 or earlier must not be reported
+            # as progress in the final curriculum unit (Juz 26).
+            current = (
+                detected_juz
+                if detected_juz is not None and 26 <= detected_juz <= 30
+                else _normalize_curriculum_juz(student.current_juz)
             )
         except (TypeError, ValueError, IndexError):
             current = _normalize_curriculum_juz(student.current_juz)
     else:
         current = _normalize_curriculum_juz(student.current_juz)
 
-    # completed_pages is the cumulative New Lesson page total. Subtract the
-    # actual Madani capacities of all earlier curriculum Juz (30 downward)
-    # to obtain progress inside the active Juz. This also preserves progress
-    # entered before Ayah-coordinate tracking was introduced.
-    base_juz = _normalize_curriculum_juz(student.juz_progress_base_juz)
+    # Preserve legacy cumulative progress while using Ayah coverage to
+    # correct duplicate/overlapping entries. completed_pages may include
+    # lessons recorded before Ayah coordinates were introduced, so using
+    # coordinates alone can incorrectly reset an active Juz to a few pages.
     active_interval = next(
         ((left, right) for number, left, right in _QURAN_JUZ_INTERVALS if number == current),
         None,
     )
-    active_has_ayah_coverage = bool(
-        active_interval and any(
-            max(left, active_interval[0]) <= min(right, active_interval[1])
-            for left, right in covered
-        )
+    coordinate_pages = covered_page_units(*active_interval) if active_interval else 0.0
+    completed_total = max(0.0, float(student.completed_pages or 0))
+    completed_before_active = sum(
+        _juz_page_capacity(number)
+        for number in range(30, current, -1)
     )
-    if active_has_ayah_coverage:
-        # Ayah coordinates are authoritative whenever this Juz has recorded
-        # New Lesson coverage. Do not estimate its pages by subtracting fixed
-        # Juz capacities from the teacher-entered cumulative page total.
-        progress_pages = covered_page_units(*active_interval)
-    elif base_juz > current:
-        # Compatibility fallback only for legacy students who have advanced
-        # beyond their baseline but have no Ayah-coordinate records in this Juz.
-        completed_total = max(0.0, float(student.completed_pages or 0))
-        completed_before_active = sum(
-            _juz_page_capacity(number)
-            for number in range(30, current, -1)
-        )
-        progress_pages = min(
-            _juz_page_capacity(current),
-            max(0.0, completed_total - completed_before_active),
-        )
-    else:
-        # Preserve any existing same-Juz baseline for legacy records, then
-        # add the unique coordinate-backed coverage recorded after migration.
-        baseline_pages = (
-            max(0.0, float(student.juz_progress_base_pages or 0))
-            if base_juz == current else 0.0
-        )
-        progress_pages = baseline_pages + (
-            covered_page_units(*active_interval) if active_interval else 0.0
-        )
+    cumulative_pages = max(0.0, completed_total - completed_before_active)
+    cumulative_pages = min(_juz_page_capacity(current), cumulative_pages)
+    baseline_pages = (
+        max(0.0, float(student.juz_progress_base_pages or 0))
+        if _normalize_curriculum_juz(student.juz_progress_base_juz) == current
+        else 0.0
+    )
+    progress_pages = max(coordinate_pages, cumulative_pages, baseline_pages)
 
     student.current_juz = current
     # Juz 26 is part of the five-Juz curriculum too; never suppress its pages.
