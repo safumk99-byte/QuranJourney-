@@ -14,12 +14,11 @@
   list.addEventListener('change',event=>{
    const input=event.target.closest('input[data-student-id]');
    if(!input)return;
-   const id=String(input.dataset.studentId);
-   if(input.checked)selected.add(id);else selected.delete(id);
-   Array.from(select.options).forEach(o=>{o.selected=selected.has(o.value)});
-   draw();
+   const option=Array.from(select.options).find(o=>o.value===String(input.dataset.studentId));
+   if(option)option.selected=input.checked;
+   renderParentStudentOptions();
   });
-  search?.addEventListener('input',draw);
+  search?.addEventListener('input',()=>renderParentStudentOptions());
   list.dataset.bound='1';
  }
  draw();
