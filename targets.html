@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b5b46">
+<title>Student Targets | Quran Journey</title>
+<meta name="description" content="Weekly and monthly Quran learning targets for every student.">
+<link rel="stylesheet" href="./style.css?v=targets-page-20261125">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<script src="./config.js"></script>
+<script src="./auth.js"></script>
+<script>
+document.documentElement.style.visibility='hidden';
+if(window.QuranJourneyAuth.requireRole(['teacher'])) document.documentElement.style.visibility='visible';
+</script>
+</head>
+<body class="targets-page">
+<header class="topbar"></header>
+<main class="container targets-container">
+  <section class="targets-hero">
+    <div class="eyebrow">QURAN JOURNEY · STUDENT PLANNING</div>
+    <h1>Weekly &amp; Monthly Targets</h1>
+    <p>Each student's current weekly and monthly page target, calculated using the existing target system.</p>
+  </section>
+  <section class="targets-toolbar panel" aria-label="Student filters">
+    <label class="targets-search">Search student
+      <input id="targetSearch" type="search" placeholder="Enter student name…" autocomplete="off">
+    </label>
+    <label class="targets-class-filter">Class
+      <select id="targetClass"><option value="">All Classes</option></select>
+    </label>
+    <button id="refreshTargets" class="btn secondary targets-refresh" type="button">↻ Refresh</button>
+  </section>
+  <section class="targets-panel panel">
+    <div class="targets-panel-head">
+      <div><div class="eyebrow green">CURRENT TARGETS</div><h2>Student Target List</h2></div>
+      <span class="count" id="targetCount">Loading…</span>
+    </div>
+    <div id="targetsMessage" class="targets-message" role="status" aria-live="polite">Loading student targets…</div>
+    <div class="targets-table-wrap" id="targetsTableWrap" hidden>
+      <table class="targets-table">
+        <thead><tr>
+          <th scope="col">Student</th>
+          <th scope="col"><span>Weekly Target</span><small id="weeklyPeriod">Current week</small></th>
+          <th scope="col"><span>Monthly Target</span><small id="monthlyPeriod">Current month</small></th>
+        </tr></thead>
+        <tbody id="targetsRows"></tbody>
+      </table>
+    </div>
+    <div class="targets-empty" id="targetsEmpty" hidden>No students match this search.</div>
+  </section>
+  <footer>Quran Journey <span>•</span> Student Targets</footer>
+</main>
+<script src="./targets.js?v=targets-page-20261125"></script>
+<script src="./nav.js"></script>
+<script src="./theme.js?v=dark-mode-20261027"></script>
+<script>if('serviceWorker' in navigator && location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
+</body>
+</html>
