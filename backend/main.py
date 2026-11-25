@@ -1834,6 +1834,23 @@ def get_monthly_character_points(student_id: int, year: int = Query(ge=2000, le=
     row = db.scalar(select(MonthlyCharacterPoints).where(MonthlyCharacterPoints.student_id == student_id, MonthlyCharacterPoints.year == year, MonthlyCharacterPoints.month == month))
     return {"student_id": student_id, "year": year, "month": month, "cleanliness_points": row.cleanliness_points if row else 0, "discipline_points": row.discipline_points if row else 0, "worship_points": row.worship_points if row else 0}
 
+@app.get("/students/{student_id}/character-points/history")
+def get_character_points_history(student_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    check_student_access(student_id, user, db)
+    rows = db.scalars(
+        select(MonthlyCharacterPoints)
+        .where(MonthlyCharacterPoints.student_id == student_id)
+        .order_by(MonthlyCharacterPoints.year.desc(), MonthlyCharacterPoints.month.desc())
+    ).all()
+    return [{
+        "student_id": row.student_id,
+        "year": row.year,
+        "month": row.month,
+        "cleanliness_points": row.cleanliness_points,
+        "discipline_points": row.discipline_points,
+        "worship_points": row.worship_points,
+    } for row in rows]
+
 @app.put("/students/{student_id}/character-points")
 def save_monthly_character_points(student_id: int, data: MonthlyCharacterPointsInput, user: User = Depends(require_teacher), db: Session = Depends(get_db)):
     check_student_access(student_id, user, db)
