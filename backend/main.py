@@ -1104,21 +1104,30 @@ def _sync_student_juz_progress(db: Session, student_id: int) -> None:
             f"{student.name} has reached Juz {current}.", "juz"
         )
 
+def notify_progress_milestones(db: Session, student: Student, old_percent: float, new_percent: float) -> None:
+    """Notify parents only when progress crosses a new whole-percent milestone."""
+    old_milestone = int(old_percent)
+    new_milestone = int(new_percent)
+    for milestone in range(old_milestone + 1, new_milestone + 1):
+        notify_student_parents(
+            db, student.id, f"progress-percent:{milestone}", "Quran progress updated",
+            f"{student.name}'s Quran progress has reached {milestone}%.", "progress"
+        )
+
+
 def adjust_completed_pages(db: Session, student_id: int, delta: float) -> None:
     if not delta:
         return
     student = db.get(Student, student_id)
     if student is None:
         return
-    old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    old_percent = (float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100
     student.completed_pages = min(
         student.total_pages,
         max(0, student.completed_pages + delta),
     )
-    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
-    if new_percent > old_percent:
-        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
-                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
+    new_percent = (float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100
+    notify_progress_milestones(db, student, old_percent, new_percent)
 
 @app.on_event("startup")
 def startup() -> None:
@@ -1463,7 +1472,7 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
             student.photo_data, student.photo_public_id = _store_student_photo(incoming_photo, student.id)
         elif not incoming_photo:
             student.photo_data, student.photo_public_id = None, None
-    old_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
+    old_percent = (float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100
     old_juz = _normalize_curriculum_juz(student.current_juz)
     if "student_code" in values and db.scalar(select(Student).where(Student.student_code == values["student_code"], Student.id != student_id)):
         raise HTTPException(status_code=409, detail="Student code already exists")
@@ -1479,10 +1488,8 @@ def update_student(student_id: int, data: StudentUpdateInput, user: User = Depen
     if "current_juz" in values or "next_juz_pages" in values:
         student.juz_progress_base_juz = _normalize_curriculum_juz(student.current_juz)
         student.juz_progress_base_pages = float(student.next_juz_pages or 0)
-    new_percent = round((float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100, 1)
-    if new_percent > old_percent:
-        notify_student_parents(db, student.id, f"progress-percent:{new_percent}", "Quran progress updated",
-                               f"{student.name}'s Quran progress has reached {new_percent}%.", "progress")
+    new_percent = (float(student.completed_pages or 0) / max(int(student.total_pages or 1), 1)) * 100
+    notify_progress_milestones(db, student, old_percent, new_percent)
     if int(student.current_juz or 30) < old_juz:
         notify_student_parents(db, student.id, f"current-juz:{student.current_juz}", "New Juz reached",
                                f"{student.name} has reached Juz {student.current_juz}.", "juz")
